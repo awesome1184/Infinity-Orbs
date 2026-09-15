@@ -1,9 +1,8 @@
-// In-memory mock for Devvit services (Redis, Context, Reddit)
-// Compatible with @devvit/web/server interface for AI Studio environment
+// Local in-memory implementation of the small Devvit service surface used by the game.
+// In production, src/server/index.ts swaps these live bindings for Devvit's real services.
 
 const store = new Map<string, string>();
 
-// Seed initial leaderboard and guilds for a vibrant community experience
 const initialGuilds = [
   {
     id: 'guild-1',
@@ -28,9 +27,7 @@ const initialGuilds = [
     tokens: 18,
     createdAt: Date.now() - 86400000 * 3,
     challenge: { type: 'value', target: 50_000, progress: 12400, reward: 500, label: 'Treasure Hunt: 50,000 collection value' },
-    members: [
-      { username: 'NullPointer', contribution: 410000, role: 'owner' },
-    ],
+    members: [{ username: 'NullPointer', contribution: 410000, role: 'owner' }],
   },
 ];
 
@@ -45,27 +42,27 @@ const initialLeaderboard = [
 store.set('io:guilds', JSON.stringify(initialGuilds));
 store.set('io:leaderboard', JSON.stringify(initialLeaderboard));
 
-export const redis = {
-  get: async (k: string): Promise<string | null> => store.get(k) ?? null,
-  set: async (k: string, v: string): Promise<string> => {
-    store.set(k, v);
+const localRedis = {
+  get: async (key: string): Promise<string | null> => store.get(key) ?? null,
+  set: async (key: string, value: string): Promise<string> => {
+    store.set(key, value);
     return 'OK';
   },
-  del: async (k: string): Promise<boolean> => store.delete(k),
-  incr: async (k: string): Promise<number> => {
-    const val = parseInt(store.get(k) || '0', 10) + 1;
-    store.set(k, String(val));
-    return val;
+  del: async (key: string): Promise<boolean> => store.delete(key),
+  incr: async (key: string): Promise<number> => {
+    const value = Number.parseInt(store.get(key) ?? '0', 10) + 1;
+    store.set(key, String(value));
+    return value;
   },
 };
 
-export const context = {
+const localContext = {
   userId: 'local-player-1',
   username: 'OrbMaster',
   subredditName: 'infinityorbs',
 };
 
-export const reddit = {
+const localReddit = {
   submitCustomPost: async (options: {
     runAs?: string;
     subredditName?: string;
@@ -74,8 +71,20 @@ export const reddit = {
     userGeneratedContent?: { text?: string };
   }) => {
     console.log('[Reddit Mock] Custom post submitted:', options.title);
-    return {
-      id: `reddit-post-${Date.now()}`,
-    };
+    return { id: `reddit-post-${Date.now()}` };
   },
 };
+
+export let redis: any = localRedis;
+export let context: any = localContext;
+export let reddit: any = localReddit;
+
+export function configureDevvitRuntime(runtime: {
+  redis: unknown;
+  context: unknown;
+  reddit: unknown;
+}) {
+  redis = runtime.redis;
+  context = runtime.context;
+  reddit = runtime.reddit;
+}
