@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "dev:reddit": "devvit playtest",
+    "dev:reddit": "devvit playtest r/infinityorbs",
     "build": "vite build",
     "start": "tsx server.ts",
     "upload": "npm run build && devvit upload",
@@ -13,7 +13,8 @@
     "deploy": "npm run type-check && npm run build && devvit upload",
     "lint": "tsc --noEmit",
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev:local": "tsx server.ts"
   },
   "dependencies": {
     "@devvit/web": "^0.14.3",
