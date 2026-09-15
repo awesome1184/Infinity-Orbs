@@ -1,70 +1,716 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { PlayerState, UpgradeId } from '../shared/game.js';
-import type { Guild, LeaderboardEntry, Achievement } from '../shared/social.js';
-import { cooldownMs, rollsPerActivation, upgradeCost, luckMultiplier } from '../shared/game.js';
+import {
+  Sparkles,
+  Zap,
+  BookOpen,
+  Calendar,
+  Users,
+  Award,
+  Trophy,
+  Dices,
+  RefreshCw,
+} from 'lucide-react';
+import type {
+  PlayerState,
+  UpgradeId,
+  PrestigeUpgradeId,
+  Orb,
+  RollResponse,
+} from '../shared/game.js';
+import type {
+  Guild,
+  LeaderboardEntry,
+  Achievement,
+  WorldEvent,
+} from '../shared/social.js';
+import {
+  cooldownMs,
+  calculateCosmicDust,
+} from '../shared/game.js';
+import { sound } from './sound.js';
+import { Header } from './components/Header.js';
+import { RollSection } from './components/RollSection.js';
+import { UpgradesSection } from './components/UpgradesSection.js';
+import { CollectionSection } from './components/CollectionSection.js';
+import { QuestsAndStreaks } from './components/QuestsAndStreaks.js';
+import { GuildsAndSocial } from './components/GuildsAndSocial.js';
+import { ProfileAndPrestige } from './components/ProfileAndPrestige.js';
+import { AchievementsSection } from './components/AchievementsSection.js';
+import { RedditShareModal } from './components/RedditShareModal.js';
+import { RarityTableModal } from './components/RarityTableModal.js';
+import { DevDebugModal } from './components/DevDebugModal.js';
 import './styles.css';
 
-const rarities = [2, 5, 10, 25, 100, 1000, 10000, 100000, 1000000];
-const names: Record<number, string> = { 2:'Common',5:'Uncommon',10:'Uncommon',25:'Rare',100:'Very Rare',1000:'Epic',10000:'Legendary',100000:'Mythic',1000000:'Divine' };
-const fmt = (n:number) => new Intl.NumberFormat('en-US').format(n);
-const pct = (n:number) => `${Math.round(n * 100)}%`;
+type ActiveTab =
+  | 'roll'
+  | 'upgrades'
+  | 'collection'
+  | 'quests'
+  | 'social'
+  | 'profile'
+  | 'achievements';
 
-type Tab = 'roll' | 'upgrades' | 'collection' | 'social' | 'achievements';
-
-async function getJson<T>(url:string, options?:RequestInit):Promise<T>{
+async function getJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `HTTP ${res.status}: ${res.statusText}`);
+  }
   return res.json();
 }
 
-function App(){
- const [s,setS]=useState<PlayerState|null>(null),[last,setLast]=useState<number|null>(null),[readyAt,setReadyAt]=useState(0),[tab,setTab]=useState<Tab>('roll'),[msg,setMsg]=useState(''),[now,setNow]=useState(Date.now()),[auto,setAuto]=useState(false),[busy,setBusy]=useState(false);
- const [board,setBoard]=useState<LeaderboardEntry[]>([]),[guildData,setGuildData]=useState<{guilds:Guild[];mine:Guild|null}>({guilds:[],mine:null}),[ach,setAch]=useState<Achievement[]>([]);
- const [guildName,setGuildName]=useState(''),[guildTag,setGuildTag]=useState('');
- const refresh=useCallback(async()=>{
-   const [me,lb,gd,ac]=await Promise.all([
-     getJson<PlayerState>('/api/me'),getJson<LeaderboardEntry[]>('/api/leaderboard'),
-     getJson<{guilds:Guild[];mine:Guild|null}>('/api/guilds'),getJson<Achievement[]>('/api/achievements')
-   ]);
-   setS(me); setAuto(me.upgrades.auto>0); setBoard(lb); setGuildData(gd); setAch(ac);
- },[]);
- useEffect(()=>{void refresh();const i=setInterval(()=>setNow(Date.now()),100);return()=>clearInterval(i)},[refresh]);
- const cd=s?cooldownMs(s):10000;
- const remain=Math.max(0,readyAt-now),can=remain<=0,multi=s?rollsPerActivation(s):1;
- const roll=useCallback(async()=>{
-   if(!can || busy)return;
-   setBusy(true);
-   try {
-     const d=await getJson<any>('/api/roll',{method:'POST'});
-     if(d.error){setMsg(d.error);return;}
-     setS(d.state);setLast(d.orb.rarity);setReadyAt(Date.now()+d.rollsRemainingUntilNext);setMsg(d.orb.rarity>=1000?'That is a serious Orb.':'');void refresh();
-   } finally { setBusy(false); }
- },[can,busy,refresh]);
- useEffect(()=>{if(!auto)return;const i=setInterval(()=>{if(Date.now()>=readyAt)void roll()},150);return()=>clearInterval(i)},[auto,readyAt,roll]);
- async function buy(id:UpgradeId){const d=await getJson<any>('/api/upgrade',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});if(d.error){setMsg(d.error);return;}setS(d.state);setMsg(id==='auto'?'🤖 Auto Roll unlocked!':'Upgrade purchased.');setAuto(d.state.upgrades.auto>0);void refresh();}
- async function claimOffline(){const d=await getJson<any>('/api/offline/claim',{method:'POST'});if(d.error){setMsg(d.error);return;}setS(d.state);setLast(d.orb.rarity);setReadyAt(Date.now()+d.rollsRemainingUntilNext);setMsg(`Claimed ${fmt(d.state.totalRolls)} total rolls. Best: 1/${fmt(d.orb.rarity)}.`);void refresh();}
- async function claimAchievement(id:string){const d=await getJson<any>('/api/achievements/claim',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});if(d.error){setMsg(d.error);return;}setS(d.state);setMsg(`Achievement claimed: +${fmt(d.reward)} Coins.`);void refresh();}
- async function join(id:string){const d=await getJson<any>('/api/guilds/join',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});setMsg(d.error??`Joined ${d.guild.name}!`);void refresh();}
- async function create(){const d=await getJson<any>('/api/guilds/create',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:guildName,tag:guildTag})});setMsg(d.error??`Created ${d.guild.name}!`);setGuildName('');setGuildTag('');void refresh();}
- async function share(){
-   if(!last)return;
-   const d=await getJson<any>('/api/share',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rarity:last})});
-   if(d.error){setMsg(d.error);return;}
-   setMsg(d.id?`Reddit post created: ${d.id}`:'Share complete.');
- }
- if(!s)return <main className="app"><h1>∞ Infinity Orbs</h1><p>Loading...</p></main>;
- const currentBest=last??s.highestRarity;
- return <main className="app">
-  <header><div><div className="brand"><span className="logo">∞</span><div><h1>Infinity Orbs</h1><p>Level {s.level} • {pct(luckMultiplier(s)-1)} Luck</p></div></div></div><strong>🪙 {fmt(s.coins)}</strong></header>
-  <section className="stats"><div>Highest<strong>1 / {fmt(s.highestRarity||2)}</strong></div><div>Rolls<strong>{fmt(s.totalRolls)}</strong></div><div>Value<strong>{fmt(s.collectionValue)}</strong></div></section>
-  {s.offlineRolls>0&&<section className="offline"><div><strong>Offline Rolls Ready</strong><span>{fmt(s.offlineRolls)} roll activations are waiting.</span></div><button onClick={()=>void claimOffline()}>CLAIM</button></section>}
-  <nav>{(['roll','upgrades','collection','social','achievements'] as const).map(t=><button className={tab===t?'active':''} onClick={()=>setTab(t)} key={t}>{t}</button>)}</nav>
-  {tab==='roll'&&<section className="panel hero"><div className={`orb ${currentBest>=100000?'mythic':''}`}><span>{last?`1 / ${fmt(last)}`:'???'}</span><small>{last?(names[last]??'Rare'): 'Your next Orb'}</small></div><div className="timer">{can?'READY':`${(remain/1000).toFixed(1)}s`}</div><button className="roll" disabled={!can||busy} onClick={()=>void roll()}>{busy?'ROLLING...':`ROLL ${multi>1?`×${multi}`:''}`}</button>{auto&&<p className="auto">🤖 AUTO ROLL ACTIVE</p>}{last&&last>=1000&&<button className="share" onClick={()=>void share()}>Post this Orb to Reddit</button>}{msg&&<p className="notice">{msg}</p>}<div className="mini"><span>Speed {(cd/1000).toFixed(1)}s</span><span>Multi ×{multi}</span><span>Luck +{pct(luckMultiplier(s)-1)}</span></div></section>}
-  {tab==='upgrades'&&<section className="panel"><h2>Upgrades</h2>{(['speed','multi','auto','luck'] as UpgradeId[]).map(id=>{const cost=upgradeCost(id,s.upgrades[id]);const level=s.upgrades[id];const desc=id==='speed'?`Cooldown ${(cd/1000).toFixed(1)}s → ${Math.max(1,(cd*0.86/1000)).toFixed(1)}s`:id==='multi'?`×${rollsPerActivation(s)} → ×${Math.min(100,rollsPerActivation(s)*2)}`:id==='auto'?(level?'Automation active.':'Unlock guaranteed Auto Roll after 10 total rolls.'):`Luck +${pct(luckMultiplier(s)-1)} → +${pct(luckMultiplier(s)-1+0.08)}`;return <article className="upgrade" key={id}><div><h3>{id==='speed'?'⚡':id==='multi'?'🎲':id==='auto'?'🤖':'🍀'} {id.toUpperCase()} <small>Lv {level}</small></h3><p>{desc}</p></div><button disabled={!Number.isFinite(cost)||s.coins<cost} onClick={()=>void buy(id)}>{level===0&&id==='auto'?'UNLOCK':Number.isFinite(cost)?`🪙 ${fmt(cost)}`:'MAX'}</button></article>})}{msg&&<p className="notice">{msg}</p>}</section>}
-  {tab==='collection'&&<section className="panel"><h2>Collection</h2>{rarities.map(r=><div className="row" key={r}><span>{names[r]}</span><strong>1 / {fmt(r)}</strong><em>×{s.collection[String(r)]??0}</em></div>)}</section>}
-  {tab==='social'&&<section className="panel"><h2>Guilds & Leaderboards</h2>{guildData.mine?<div className="guildCard"><strong>[{guildData.mine.tag}] {guildData.mine.name}</strong><span>Lv {guildData.mine.level} • {guildData.mine.members.length}/50 members</span><small>Your contribution: {fmt(guildData.mine.members.find(m=>m.username.startsWith('reddit-user-'))?.contribution??0)}</small></div>:<div className="createGuild"><h3>Create a Guild</h3><div className="form"><input value={guildName} onChange={e=>setGuildName(e.target.value)} placeholder="Guild name" maxLength={32}/><input value={guildTag} onChange={e=>setGuildTag(e.target.value)} placeholder="TAG" maxLength={5}/><button onClick={()=>void create()}>Create</button></div></div>}<div className="socialGrid"><div><h3>Top Players</h3>{board.slice(0,10).map((e,i)=><div className="rank" key={e.username}><b>#{i+1}</b><span>{e.username}</span><strong>{fmt(e.value)}</strong></div>)}</div><div><h3>Top Guilds</h3>{guildData.guilds.slice(0,10).map((g,i)=><div className="rank" key={g.id}><b>#{i+1}</b><span>[{g.tag}] {g.name}</span><strong>Lv {g.level}</strong>{!guildData.mine&&<button onClick={()=>void join(g.id)}>Join</button>}</div>)}</div></div></section>}
-  {tab==='achievements'&&<section className="panel"><h2>Achievements</h2>{ach.map(a=>{const claimed=s.claimedAchievements.includes(a.id);return <div className={`achievement ${a.unlocked?'unlocked':''}`} key={a.id}><span>{claimed?'🏆':a.unlocked?'✅':'🔒'}</span><div><strong>{a.name}</strong><p>{a.description}</p></div>{claimed?<em>CLAIMED</em>:a.unlocked?<button onClick={()=>void claimAchievement(a.id)}>+{fmt(a.reward)} 🪙</button>:<em>+{fmt(a.reward)} 🪙</em>}</div>})}</section>}
- </main>;
+export function App() {
+  const [state, setState] = useState<PlayerState | null>(null);
+  const [lastOrb, setLastOrb] = useState<Orb | null>(null);
+  const [lastBatch, setLastBatch] = useState<Orb[]>([]);
+  const [batchSummary, setBatchSummary] = useState<{
+    totalVal: number;
+    coins: number;
+    shards: number;
+    xp: number;
+  } | null>(null);
+
+  const [readyAt, setReadyAt] = useState<number>(0);
+  const [now, setNow] = useState<number>(Date.now());
+  const [tab, setTab] = useState<ActiveTab>('roll');
+  const [autoRoll, setAutoRoll] = useState<boolean>(false);
+  const [isRolling, setIsRolling] = useState<boolean>(false);
+  const [busy, setBusy] = useState<boolean>(false);
+  const [toast, setToast] = useState<{ msg: string; type?: 'info' | 'success' | 'warn' } | null>(null);
+
+  // Social & Community state
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
+  const [guildData, setGuildData] = useState<{ guilds: Guild[]; mine: Guild | null }>({
+    guilds: [],
+    mine: null,
+  });
+  const [achievementsData, setAchievementsData] = useState<Achievement[]>([]);
+  const [worldEvent, setWorldEvent] = useState<WorldEvent | null>(null);
+
+  // Modals
+  const [shareRarity, setShareRarity] = useState<number | null>(null);
+  const [showOddsModal, setShowOddsModal] = useState<boolean>(false);
+  const [showDevModal, setShowDevModal] = useState<boolean>(false);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(sound.enabled);
+
+  const showToast = (msg: string, type: 'info' | 'success' | 'warn' = 'info') => {
+    setToast({ msg, type });
+    setTimeout(() => {
+      setToast(prev => (prev?.msg === msg ? null : prev));
+    }, 4000);
+  };
+
+  const refreshAll = useCallback(async () => {
+    try {
+      const [me, lb, gd, ach, we] = await Promise.all([
+        getJson<PlayerState>('/api/me'),
+        getJson<LeaderboardEntry[]>('/api/leaderboard'),
+        getJson<{ guilds: Guild[]; mine: Guild | null }>('/api/guilds'),
+        getJson<Achievement[]>('/api/achievements'),
+        getJson<WorldEvent>('/api/world-event').catch(() => null),
+      ]);
+      setState(me);
+      setLeaderboardData(lb);
+      setGuildData(gd);
+      setAchievementsData(ach);
+      if (we) setWorldEvent(we);
+    } catch (e: any) {
+      console.error('Refresh error:', e);
+    }
+  }, []);
+
+  // Initial load & tick loop (paced smoothly at 250ms to prevent high-frequency re-render jitter)
+  useEffect(() => {
+    void refreshAll();
+    const interval = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(interval);
+  }, [refreshAll]);
+
+  // Roll action
+  const handleRoll = useCallback(async () => {
+    if (isRolling) return;
+    setIsRolling(true);
+    try {
+      sound.playRollNormal();
+      const res = await getJson<RollResponse>('/api/roll', { method: 'POST' });
+      setState(res.state);
+      setLastOrb(res.orb);
+      setLastBatch(res.batch ?? [res.orb]);
+      setBatchSummary({
+        totalVal: res.totalRollValue,
+        coins: res.coinsGained,
+        shards: res.shardsGained,
+        xp: res.xpGained,
+      });
+      setReadyAt(Date.now() + res.rollsRemainingUntilNext);
+
+      if (res.orb.rarity >= 100000) {
+        showToast(`⭐ MYTHIC DROP! 1 / ${res.orb.rarity.toLocaleString()} Orb!`, 'success');
+      } else if (res.orb.rarity >= 1000) {
+        showToast(`★ Rare Find! 1 in ${res.orb.rarity.toLocaleString()}`, 'success');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Roll failed', 'warn');
+    } finally {
+      setIsRolling(false);
+    }
+  }, [isRolling]);
+
+  // Auto roll watcher (paced steadily)
+  useEffect(() => {
+    if (!autoRoll || !state || state.upgrades.auto === 0) return;
+    const interval = setInterval(() => {
+      if (Date.now() >= readyAt && !isRolling) {
+        void handleRoll();
+      }
+    }, 300);
+    return () => clearInterval(interval);
+  }, [autoRoll, state, readyAt, isRolling, handleRoll]);
+
+  // Buy Standard Upgrade
+  const handleBuyUpgrade = async (id: UpgradeId) => {
+    setBusy(true);
+    try {
+      const res = await getJson<{ state: PlayerState }>('/api/upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setState(res.state);
+      sound.playChime(659.25, 'sine', 0.2);
+      showToast(`Upgraded ${id.toUpperCase()} successfully!`, 'success');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Upgrade failed', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Turbo Roll Booster
+  const handleActivateTurbo = async () => {
+    setBusy(true);
+    try {
+      const res = await getJson<{ state: PlayerState }>('/api/turbo/activate', { method: 'POST' });
+      setState(res.state);
+      sound.playChime(880, 'sawtooth', 0.3);
+      showToast('Turbo Roll Activated! Cooldowns reduced by 20% for 30m.', 'success');
+    } catch (e: any) {
+      showToast(e.message || 'Could not activate turbo roll', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Claim Offline Rolls
+  const handleClaimOffline = async () => {
+    setBusy(true);
+    try {
+      const res = await getJson<RollResponse>('/api/offline/claim', { method: 'POST' });
+      setState(res.state);
+      setLastOrb(res.orb);
+      setLastBatch(res.batch ?? [res.orb]);
+      setBatchSummary({
+        totalVal: res.totalRollValue,
+        coins: res.coinsGained,
+        shards: res.shardsGained,
+        xp: res.xpGained,
+      });
+      setReadyAt(Date.now() + res.rollsRemainingUntilNext);
+      sound.playEpicFanfare();
+      showToast(
+        `Claimed ${res.batch?.length ?? 0} offline rolls! Highest: 1/${res.orb.rarity.toLocaleString()}`,
+        'success'
+      );
+    } catch (e: any) {
+      showToast(e.message || 'Could not claim offline rolls', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Daily Streak
+  const handleClaimDailyStreak = async () => {
+    setBusy(true);
+    try {
+      const res = await getJson<{ state: PlayerState; rewardCoins: number; rewardShards: number }>(
+        '/api/streak/claim',
+        { method: 'POST' }
+      );
+      setState(res.state);
+      sound.playChime(784, 'triangle', 0.3);
+      showToast(
+        `Streak claimed! +${res.rewardCoins} Coins ${res.rewardShards > 0 ? `+${res.rewardShards} Shards` : ''}`,
+        'success'
+      );
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Could not claim streak', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Claim Quest
+  const handleClaimQuest = async (type: 'daily' | 'weekly', id: string) => {
+    setBusy(true);
+    try {
+      const res = await getJson<{ state: PlayerState; rewardCoins: number; rewardShards?: number }>(
+        '/api/quests/claim',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, id }),
+        }
+      );
+      setState(res.state);
+      sound.playChime(700, 'sine', 0.25);
+      showToast(`Quest completed! +${res.rewardCoins.toLocaleString()} Coins`, 'success');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Could not claim quest', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Claim Achievement
+  const handleClaimAchievement = async (id: string) => {
+    setBusy(true);
+    try {
+      const res = await getJson<{
+        state: PlayerState;
+        rewardCoins: number;
+        rewardShards: number;
+      }>('/api/achievements/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setState(res.state);
+      sound.playChime(880, 'triangle', 0.3);
+      showToast(`Achievement reward claimed! +${res.rewardCoins} Coins`, 'success');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Could not claim achievement', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Prestige Reset
+  const handlePrestige = async () => {
+    setBusy(true);
+    try {
+      const res = await getJson<{ state: PlayerState; dustGained: number }>('/api/prestige', {
+        method: 'POST',
+      });
+      setState(res.state);
+      sound.playMythicFanfare();
+      showToast(`Prestige Complete! You harnessed +${res.dustGained} Cosmic Dust!`, 'success');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Prestige failed', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Buy Permanent Prestige Upgrade
+  const handleBuyPrestigeUpgrade = async (id: PrestigeUpgradeId) => {
+    setBusy(true);
+    try {
+      const res = await getJson<{ state: PlayerState }>('/api/prestige/upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setState(res.state);
+      sound.playChime(659.25, 'sine', 0.25);
+      showToast('Permanent cosmic upgrade obtained!', 'success');
+    } catch (e: any) {
+      showToast(e.message || 'Prestige upgrade failed', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Cosmetics
+  const handleBuyCosmetic = async (id: string) => {
+    setBusy(true);
+    try {
+      const res = await getJson<{ state: PlayerState }>('/api/cosmetics/buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setState(res.state);
+      sound.playChime(523.25, 'sine', 0.2);
+      showToast('Cosmetic equipped!', 'success');
+    } catch (e: any) {
+      showToast(e.message || 'Cosmetic purchase failed', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Guilds
+  const handleCreateGuild = async (name: string, tag: string) => {
+    setBusy(true);
+    try {
+      await getJson('/api/guilds/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, tag }),
+      });
+      showToast(`Guild [${tag}] ${name} founded!`, 'success');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Could not create guild', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleJoinGuild = async (id: string) => {
+    setBusy(true);
+    try {
+      await getJson('/api/guilds/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      showToast('Joined guild successfully!', 'success');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Could not join guild', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleLeaveGuild = async () => {
+    setBusy(true);
+    try {
+      await getJson('/api/guilds/leave', { method: 'POST' });
+      showToast('You left the guild.', 'info');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Could not leave guild', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSendGuildChat = async (text: string) => {
+    try {
+      await getJson('/api/guilds/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Could not send message', 'warn');
+    }
+  };
+
+  // Share to Reddit
+  const handleShareToReddit = async (rarity: number) => {
+    const res = await getJson<{ success: boolean; id?: string }>('/api/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rarity }),
+    });
+    void refreshAll();
+    return res;
+  };
+
+  if (!state) {
+    return (
+      <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 space-y-3">
+        <RefreshCw className="w-8 h-8 animate-spin text-purple-500" />
+        <p className="text-sm font-semibold">Connecting to Infinity Orbs...</p>
+      </main>
+    );
+  }
+
+  // Calculate notification counters
+  const today = new Date().toISOString().slice(0, 10);
+  const streakReady = state.streak.lastClaimDate !== today;
+  const questsReady =
+    state.dailyQuests.some(q => !q.claimed && q.progress >= q.target) ||
+    state.weeklyQuests.some(q => !q.claimed && q.progress >= q.target);
+  const achievementsReady = achievementsData.some(a => a.unlocked && !a.claimed);
+  const prestigeReady = calculateCosmicDust(state) > 0;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
+      {/* Sticky Top Header */}
+      <Header
+        state={state}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled(sound.toggle())}
+        onOpenOdds={() => setShowOddsModal(true)}
+        onClaimOffline={handleClaimOffline}
+        onOpenDevDebug={() => setShowDevModal(true)}
+      />
+
+      {/* Ephemeral Toast Banner */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 animate-in slide-in-from-bottom-5 duration-300">
+          <div
+            className={`px-4 py-3 rounded-2xl text-xs font-bold shadow-2xl border flex items-center gap-2 ${
+              toast.type === 'success'
+                ? 'bg-slate-900 border-emerald-500/50 text-emerald-300 shadow-emerald-950/50'
+                : toast.type === 'warn'
+                ? 'bg-slate-900 border-rose-500/50 text-rose-300 shadow-rose-950/50'
+                : 'bg-slate-900 border-slate-700 text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <span>{toast.msg}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Main Navigation Bar */}
+      <div className="bg-slate-900/40 border-b border-slate-800/80 px-4 py-2 sticky top-[57px] z-20 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          <button
+            onClick={() => {
+              sound.playClick();
+              setTab('roll');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              tab === 'roll'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Dices className="w-3.5 h-3.5" />
+            <span>Roll</span>
+          </button>
+
+          <button
+            onClick={() => {
+              sound.playClick();
+              setTab('upgrades');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              tab === 'upgrades'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>Upgrades</span>
+          </button>
+
+          <button
+            onClick={() => {
+              sound.playClick();
+              setTab('collection');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              tab === 'collection'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Codex</span>
+          </button>
+
+          <button
+            onClick={() => {
+              sound.playClick();
+              setTab('quests');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
+              tab === 'quests'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Quests</span>
+            {(streakReady || questsReady) && (
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              sound.playClick();
+              setTab('social');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              tab === 'social'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Guilds & Social</span>
+          </button>
+
+          <button
+            onClick={() => {
+              sound.playClick();
+              setTab('achievements');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
+              tab === 'achievements'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-300" />
+            <span>Trophies</span>
+            {achievementsReady && (
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              sound.playClick();
+              setTab('profile');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
+              tab === 'profile'
+                ? 'bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-fuchsia-400" />
+            <span>Prestige</span>
+            {prestigeReady && (
+              <span className="w-2 h-2 rounded-full bg-fuchsia-400" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Main Container Content */}
+      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        {tab === 'roll' && (
+          <RollSection
+            state={state}
+            lastOrb={lastOrb}
+            lastBatch={lastBatch}
+            batchSummary={batchSummary}
+            readyAt={readyAt}
+            now={now}
+            busy={isRolling}
+            autoRoll={autoRoll}
+            onToggleAutoRoll={() => setAutoRoll(!autoRoll)}
+            onRoll={handleRoll}
+            onOpenShareModal={r => setShareRarity(r)}
+          />
+        )}
+
+        {tab === 'upgrades' && (
+          <UpgradesSection
+            state={state}
+            onBuyUpgrade={handleBuyUpgrade}
+            onActivateTurbo={handleActivateTurbo}
+            busy={busy}
+          />
+        )}
+
+        {tab === 'collection' && (
+          <CollectionSection
+            state={state}
+            onOpenShareModal={r => setShareRarity(r)}
+          />
+        )}
+
+        {tab === 'quests' && (
+          <QuestsAndStreaks
+            state={state}
+            onClaimDailyStreak={handleClaimDailyStreak}
+            onClaimQuest={handleClaimQuest}
+            busy={busy}
+          />
+        )}
+
+        {tab === 'social' && (
+          <GuildsAndSocial
+            guilds={guildData.guilds}
+            myGuild={guildData.mine}
+            leaderboard={leaderboardData}
+            worldEvent={worldEvent}
+            onCreateGuild={handleCreateGuild}
+            onJoinGuild={handleJoinGuild}
+            onLeaveGuild={handleLeaveGuild}
+            onSendMessage={handleSendGuildChat}
+            busy={busy}
+          />
+        )}
+
+        {tab === 'achievements' && (
+          <AchievementsSection
+            achievements={achievementsData}
+            state={state}
+            onClaimAchievement={handleClaimAchievement}
+            busy={busy}
+          />
+        )}
+
+        {tab === 'profile' && (
+          <ProfileAndPrestige
+            state={state}
+            onPrestige={handlePrestige}
+            onBuyPrestigeUpgrade={handleBuyPrestigeUpgrade}
+            onBuyCosmetic={handleBuyCosmetic}
+            busy={busy}
+          />
+        )}
+      </main>
+
+      {/* Reddit Share Modal (GDD Section 17 & 18) */}
+      {shareRarity !== null && (
+        <RedditShareModal
+          rarity={shareRarity}
+          state={state}
+          onClose={() => setShareRarity(null)}
+          onShare={handleShareToReddit}
+        />
+      )}
+
+      {/* Fair RNG Odds Table Modal (Design Pillar 2.5) */}
+      {showOddsModal && (
+        <RarityTableModal onClose={() => setShowOddsModal(false)} />
+      )}
+
+      {/* Developer Debug Modal */}
+      {showDevModal && (
+        <DevDebugModal
+          onClose={() => setShowDevModal(false)}
+          onRefresh={refreshAll}
+          onForceRollResult={res => {
+            setTab('roll');
+            setState(res.state);
+            setLastOrb(res.orb);
+            setLastBatch(res.batch ?? [res.orb]);
+            setBatchSummary({
+              totalVal: res.totalRollValue,
+              coins: res.coinsGained,
+              shards: res.shardsGained,
+              xp: res.xpGained,
+            });
+            setReadyAt(Date.now() + res.rollsRemainingUntilNext);
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
-createRoot(document.getElementById('root')!).render(<App/>);
+const rootEl = document.getElementById('root');
+if (rootEl) {
+  createRoot(rootEl).render(<App />);
+}

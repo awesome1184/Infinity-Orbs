@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getMe, roll, buyUpgrade, claimOffline } from './game.js';
 import { achievements, claimAchievement, createGuild, guildInfo, joinGuild, leaderboard, shareText } from './social.js';
-import { context, reddit } from '@devvit/web/server';
+import { context, reddit } from './devvit-mock.js';
 
 const app = new Hono();
 app.get('/api/me', async c => c.json(await getMe()));
