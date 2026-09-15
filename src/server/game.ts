@@ -1,12 +1,22 @@
 import { redis, context } from '@devvit/web/server';
-import { INITIAL_STATE, PlayerState, RollResponse, UpgradeId, AUTO_UNLOCK_ROLLS, cooldownMs, rollsPerActivation, luckMultiplier, upgradeCost } from '../shared/game.js';
+import { createInitialState, type PlayerState, type RollResponse, type UpgradeId, AUTO_UNLOCK_ROLLS, cooldownMs, rollsPerActivation, luckMultiplier, upgradeCost, offlineRollCap } from '../shared/game.js';
 import { contribute, recordLeaderboard } from './social.js';
 
 const key = () => `player:${context.userId ?? 'unknown'}`;
-async function load(): Promise<PlayerState> {
+
+async function loadRaw(): Promise<PlayerState> {
   const raw = await redis.get(key());
-  return raw ? JSON.parse(raw) : structuredClone(INITIAL_STATE);
+  if (!raw) return createInitialState();
+  const parsed = JSON.parse(raw) as Partial<PlayerState>;
+  return {
+    ...createInitialState(),
+    ...parsed,
+    upgrades: { ...createInitialState().upgrades, ...(parsed.upgrades ?? {}) },
+    collection: parsed.collection ?? {},
+    claimedAchievements: parsed.claimedAchievements ?? [],
+  };
 }
+
 async function save(s: PlayerState) { await redis.set(key(), JSON.stringify(s)); }
 
 const table = [
@@ -21,10 +31,11 @@ function weightedOrb(luck: number) {
   return 2;
 }
 
-async function applyRolls(s: PlayerState) {
+async function applyRolls(s: PlayerState, activationCount = 1) {
   let best = 0;
   let contributionValue = 0;
-  for (let i = 0; i < rollsPerActivation(s); i++) {
+  const rollCount = rollsPerActivation(s) * activationCount;
+  for (let i = 0; i < rollCount; i++) {
     const rarity = weightedOrb(luckMultiplier(s));
     best = Math.max(best, rarity);
     contributionValue += rarity;
@@ -40,10 +51,38 @@ async function applyRolls(s: PlayerState) {
   return best;
 }
 
-export async function getMe() { return load(); }
+async function settleOffline(s: PlayerState, now = Date.now()) {
+  const elapsed = Math.max(0, now - s.lastSeenAt);
+  if (s.upgrades.auto > 0 && elapsed >= 1000) {
+    const gained = Math.floor(elapsed / cooldownMs(s));
+    s.offlineRolls = Math.min(offlineRollCap(s), s.offlineRolls + gained);
+  }
+  s.lastSeenAt = now;
+  await save(s);
+  return s;
+}
+
+export async function getMe() {
+  const s = await loadRaw();
+  return settleOffline(s);
+}
+
+export async function claimOffline(): Promise<RollResponse> {
+  const s = await settleOffline(await loadRaw());
+  if (s.offlineRolls <= 0) throw new Error('No offline rolls are waiting.');
+  const batches = s.offlineRolls;
+  s.offlineRolls = 0;
+  const best = await applyRolls(s, batches);
+  const now = Date.now();
+  s.lastRollAt = now;
+  s.lastSeenAt = now;
+  await save(s);
+  await recordLeaderboard(s);
+  return { orb: { rarity: best, rolledAt: now }, state: s, rollsRemainingUntilNext: cooldownMs(s) };
+}
 
 export async function roll(): Promise<RollResponse> {
-  const s = await load();
+  const s = await settleOffline(await loadRaw());
   const now = Date.now();
   const cd = cooldownMs(s);
   if (s.lastRollAt !== null && now - s.lastRollAt < cd) {
@@ -51,13 +90,14 @@ export async function roll(): Promise<RollResponse> {
   }
   const best = await applyRolls(s);
   s.lastRollAt = now;
+  s.lastSeenAt = now;
   await save(s);
   await recordLeaderboard(s);
-  return { orb: { rarity: best, rolledAt: now }, state: s, rollsRemainingUntilNext: cooldownMs(s) };
+  return { orb: { rarity: best, rolledAt: now }, state: s, rollsRemainingUntilNext: cd };
 }
 
 export async function buyUpgrade(id: UpgradeId) {
-  const s = await load();
+  const s = await settleOffline(await loadRaw());
   const level = s.upgrades[id];
   const cost = upgradeCost(id, level);
   if (id === 'auto' && level === 0 && s.totalRolls < AUTO_UNLOCK_ROLLS) {
