@@ -1,0 +1,1 @@
+import { defineConfig } from 'vite'; import { resolve } from 'node:path'; export default defineConfig({ build:{ssr:true,ssrEmitAssets:true,rollupOptions:{input:resolve('src/server/index.ts'),output:{format:'cjs',entryFileNames:'index.cjs'}}}, resolve:{conditions:['node']}});
