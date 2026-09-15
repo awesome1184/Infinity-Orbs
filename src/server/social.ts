@@ -4,7 +4,7 @@ import { ACHIEVEMENTS } from '../shared/social.js';
 import type { PlayerState } from '../shared/game.js';
 
 const user = () => context.userId ?? 'unknown';
-const username = () => `reddit-user-${user().slice(-8)}`;
+const username = () => context.username ?? `reddit-user-${user().slice(-8)}`;
 const key = (name: string) => `io:${name}`;
 
 async function loadGuilds(): Promise<Guild[]> {
@@ -70,9 +70,8 @@ export async function recordLeaderboard(s: PlayerState) {
   await redis.set(key('leaderboard'), JSON.stringify(board.slice(0, 100)));
 }
 
-export async function achievements(s: PlayerState): Promise<Achievement[]> {
-  return ACHIEVEMENTS.map(a => ({ ...a, unlocked:
-    (a.id === 'first-roll' && s.totalRolls >= 1) ||
+function unlocked(a: Achievement, s: PlayerState) {
+  return (a.id === 'first-roll' && s.totalRolls >= 1) ||
     (a.id === 'ten-rolls' && s.totalRolls >= 10) ||
     (a.id === 'auto' && s.upgrades.auto > 0) ||
     (a.id === 'rare-100' && s.highestRarity >= 100) ||
@@ -80,9 +79,27 @@ export async function achievements(s: PlayerState): Promise<Achievement[]> {
     (a.id === 'legendary-10000' && s.highestRarity >= 10000) ||
     (a.id === 'mythic-100k' && s.highestRarity >= 100000) ||
     (a.id === 'roll-1000' && s.totalRolls >= 1000) ||
-    (a.id === 'collection-1m' && s.collectionValue >= 1_000_000)
-  }));
+    (a.id === 'collection-1m' && s.collectionValue >= 1_000_000);
 }
+
+export async function achievements(s: PlayerState): Promise<Achievement[]> {
+  return ACHIEVEMENTS.map(a => ({ ...a, unlocked: unlocked(a, s) }));
+}
+
+export async function claimAchievement(s: PlayerState, id: string) {
+  const achievement = ACHIEVEMENTS.find(a => a.id === id);
+  if (!achievement) throw new Error('Achievement not found.');
+  if (!unlocked(achievement as Achievement, s)) throw new Error('Achievement is not unlocked yet.');
+  if (s.claimedAchievements.includes(id)) throw new Error('Achievement reward already claimed.');
+  s.claimedAchievements.push(id);
+  s.coins += achievement.reward;
+  const raw = await redis.get(`player:${user()}`);
+  if (!raw) throw new Error('Player state unavailable.');
+  await redis.set(`player:${user()}`, JSON.stringify(s));
+  return { state: s, reward: achievement.reward };
+}
+
+export function achievementClaimed(s: PlayerState, id: string) { return s.claimedAchievements.includes(id); }
 
 export function shareText(s: PlayerState, rarity: number) {
   return `I just found a 1/${rarity.toLocaleString()} Orb in Infinity Orbs!\\n\\nRoll #${s.totalRolls} • Collection Value ${s.collectionValue.toLocaleString()}\\n\\nCan you beat it?`;
