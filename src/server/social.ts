@@ -4,16 +4,14 @@ import { ACHIEVEMENTS } from '../shared/social.js';
 import type { PlayerState } from '../shared/game.js';
 
 const user = () => context.userId ?? 'unknown';
-const username = () => context.username ?? `reddit-user-${user().slice(-6)}`;
+const username = () => `reddit-user-${user().slice(-8)}`;
 const key = (name: string) => `io:${name}`;
 
 async function loadGuilds(): Promise<Guild[]> {
   const raw = await redis.get(key('guilds'));
   return raw ? JSON.parse(raw) : [];
 }
-async function saveGuilds(guilds: Guild[]) {
-  await redis.set(key('guilds'), JSON.stringify(guilds));
-}
+async function saveGuilds(guilds: Guild[]) { await redis.set(key('guilds'), JSON.stringify(guilds)); }
 
 export async function guildInfo() {
   const guilds = await loadGuilds();
@@ -28,19 +26,8 @@ export async function createGuild(name: string, tag: string) {
   const guilds = await loadGuilds();
   if (guilds.some(g => g.name.toLowerCase() === cleanName.toLowerCase() || g.tag === cleanTag)) throw new Error('That guild name or tag is already taken.');
   if (guilds.some(g => g.members.some(m => m.username === username()))) throw new Error('Leave your current guild first.');
-  const guild: Guild = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    name: cleanName,
-    tag: cleanTag,
-    level: 1,
-    xp: 0,
-    tokens: 0,
-    createdAt: Date.now(),
-    members: [{ username: username(), contribution: 0, role: 'owner' }],
-  };
-  guilds.push(guild);
-  await saveGuilds(guilds);
-  return guild;
+  const guild: Guild = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: cleanName, tag: cleanTag, level: 1, xp: 0, tokens: 0, createdAt: Date.now(), members: [{ username: username(), contribution: 0, role: 'owner' }] };
+  guilds.push(guild); await saveGuilds(guilds); return guild;
 }
 
 export async function joinGuild(guildId: string) {
@@ -50,8 +37,7 @@ export async function joinGuild(guildId: string) {
   if (!guild) throw new Error('Guild not found.');
   if (guild.members.length >= 50) throw new Error('That guild is full.');
   guild.members.push({ username: username(), contribution: 0, role: 'member' });
-  await saveGuilds(guilds);
-  return guild;
+  await saveGuilds(guilds); return guild;
 }
 
 export async function contribute(value: number) {
@@ -77,8 +63,8 @@ export async function leaderboard(): Promise<LeaderboardEntry[]> {
 export async function recordLeaderboard(s: PlayerState) {
   const board = await leaderboard();
   const name = username();
-  const existing = board.find(e => e.username === name);
   const next: LeaderboardEntry = { username: name, value: s.collectionValue, highestRarity: s.highestRarity, totalRolls: s.totalRolls };
+  const existing = board.find(e => e.username === name);
   if (existing) Object.assign(existing, next); else board.push(next);
   board.sort((a, b) => b.value - a.value);
   await redis.set(key('leaderboard'), JSON.stringify(board.slice(0, 100)));
