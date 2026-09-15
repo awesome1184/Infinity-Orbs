@@ -8,21 +8,31 @@ export interface PlayerState {
   upgrades: Record<UpgradeId, number>;
 }
 export interface RollResponse { orb: Orb; state: PlayerState; rollsRemainingUntilNext: number; }
-export const INITIAL_STATE: PlayerState = {
-  coins: 100, level: 1, xp: 0, totalRolls: 0, highestRarity: 0,
-  collectionValue: 0, collection: {}, lastRollAt: null,
-  lastSeenAt: Date.now(), offlineRolls: 0, claimedAchievements: [],
-  upgrades: { speed: 0, multi: 0, auto: 0, luck: 0 }
-};
+
+export function createInitialState(now = Date.now()): PlayerState {
+  return {
+    coins: 100, level: 1, xp: 0, totalRolls: 0, highestRarity: 0,
+    collectionValue: 0, collection: {}, lastRollAt: null,
+    lastSeenAt: now, offlineRolls: 0, claimedAchievements: [],
+    upgrades: { speed: 0, multi: 0, auto: 0, luck: 0 }
+  };
+}
+
+export const INITIAL_STATE = createInitialState();
 export const BASE_COOLDOWN_MS = 10_000;
 export const AUTO_UNLOCK_ROLLS = 10;
 export const AUTO_UNLOCK_COST = 200;
 export const MAX_OFFLINE_ROLLS = 10_000;
-export function cooldownMs(s: PlayerState) { return Math.max(1000, Math.round(BASE_COOLDOWN_MS * Math.pow(0.86, s.upgrades.speed))); }
+
+export function cooldownMs(s: PlayerState) {
+  return Math.max(1000, Math.round(BASE_COOLDOWN_MS * Math.pow(0.86, s.upgrades.speed)));
+}
 export function rollsPerActivation(s: PlayerState) { return Math.min(100, 2 ** s.upgrades.multi); }
 export function autoUnlocked(s: PlayerState) { return s.upgrades.auto > 0; }
 export function luckMultiplier(s: PlayerState) { return 1 + s.upgrades.luck * 0.08; }
-export function offlineRollCap(s: PlayerState) { return Math.min(MAX_OFFLINE_ROLLS, Math.round((60 + s.upgrades.auto * 60) * (1 + s.upgrades.speed * 0.05))); }
+export function offlineRollCap(s: PlayerState) {
+  return Math.min(MAX_OFFLINE_ROLLS, Math.round((60 + s.upgrades.auto * 60) * (1 + s.upgrades.speed * 0.05)));
+}
 export function upgradeCost(id: UpgradeId, level: number) {
   if (id === 'auto') return level ? Infinity : AUTO_UNLOCK_COST;
   const base = { speed: 50, multi: 100, luck: 200 }[id];
