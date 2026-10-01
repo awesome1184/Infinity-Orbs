@@ -1,6 +1,6 @@
 import { context, redis } from './devvit-mock.js';
-import type { Guild, LeaderboardEntry, Achievement, GuildMessage, GuildPerkId } from '../shared/social.js';
-import { ACHIEVEMENTS, challengeForWeek } from '../shared/social.js';
+import type { Guild, LeaderboardEntry, Achievement, GuildMessage, GuildPerkId, WorldEvent } from '../shared/social.js';
+import { ACHIEVEMENTS, CHALLENGE_POOL, challengeForWeek, COMMUNITY_WORLD_EVENT, createInitialGuildBoss } from '../shared/social.js';
 import type { PlayerState } from '../shared/game.js';
 import { cooldownMs } from '../shared/game.js';
 
@@ -11,8 +11,26 @@ const key = (name: string) => `io:${name}`;
 async function loadGuilds(): Promise<Guild[]> {
   const raw = await redis.get(key('guilds'));
   const list: Guild[] = raw ? JSON.parse(raw) : [];
+  const currentWeek = Math.floor(Date.now() / 604_800_000);
   list.forEach(g => {
-    if (!g.perks) g.perks = { luckRank: 0, speedRank: 0, vaultRank: 0 };
+    if (!g.perks) {
+      g.perks = {
+        luckRank: 0,
+        speedRank: 0,
+        vaultRank: 0,
+        shardRank: 0,
+        critRank: 0,
+        coinRank: 0,
+      };
+    }
+    if (!g.boss || (g as any).bossWeek !== currentWeek) {
+      g.boss = createInitialGuildBoss(Math.max(1, Math.min(10, g.level || 1)));
+      (g as any).bossWeek = currentWeek;
+    }
+    if (!g.challenge || (g as any).challengeWeek !== currentWeek) {
+      g.challenge = challengeForWeek();
+      (g as any).challengeWeek = currentWeek;
+    }
   });
   return list;
 }
@@ -30,6 +48,19 @@ export async function guildInfo() {
   };
 }
 
+export async function getPlayerGuildPerks(uname: string) {
+  const guilds = await loadGuilds();
+  const mine = guilds.find(g => g.members.some(m => m.username === uname));
+  return mine?.perks ?? {
+    luckRank: 0,
+    speedRank: 0,
+    vaultRank: 0,
+    shardRank: 0,
+    critRank: 0,
+    coinRank: 0,
+  };
+}
+
 export async function addGuildTokens(uname: string, amount: number) {
   if (amount <= 0) return;
   const guilds = await loadGuilds();
@@ -40,7 +71,7 @@ export async function addGuildTokens(uname: string, amount: number) {
   guild.chat.push({
     id: `msg-${Date.now()}`,
     username: 'System',
-    text: `${uname} contributed +${amount} Guild Tokens from quest completion!`,
+    text: `${uname} contributed +${amount} Guild Tokens from quest.`,
     timestamp: Date.now(),
     isSystem: true,
   });
@@ -51,10 +82,19 @@ export async function buyGuildPerk(perk: GuildPerkId) {
   const guilds = await loadGuilds();
   const guild = guilds.find(g => g.members.some(m => m.username === username()));
   if (!guild) throw new Error('You are not in a guild.');
-  if (!guild.perks) guild.perks = { luckRank: 0, speedRank: 0, vaultRank: 0 };
+  if (!guild.perks) {
+    guild.perks = {
+      luckRank: 0,
+      speedRank: 0,
+      vaultRank: 0,
+      shardRank: 0,
+      critRank: 0,
+      coinRank: 0,
+    };
+  }
 
   const current = guild.perks[perk] ?? 0;
-  if (current >= 10) throw new Error('Perk is already max rank (10).');
+  if (current >= 10) throw new Error('Perk is already max level (10).');
 
   const cost = (current + 1) * 25;
   if ((guild.tokens ?? 0) < cost) {
@@ -65,22 +105,63 @@ export async function buyGuildPerk(perk: GuildPerkId) {
   guild.perks[perk] = current + 1;
 
   const perkNames: Record<GuildPerkId, string> = {
-    luckRank: 'Celestial Luck Aura',
-    speedRank: 'Chronos Speed Blessing',
-    vaultRank: 'Astral Vault Expansion',
+    luckRank: 'Luck Aura',
+    speedRank: 'Speed Blessing',
+    vaultRank: 'Vault Expansion',
+    shardRank: 'Shard Attunement',
+    critRank: 'Critical Warcry',
+    coinRank: 'Treasury Prosperity',
   };
 
   if (!guild.chat) guild.chat = [];
   guild.chat.push({
     id: `msg-${Date.now()}`,
     username: 'System',
-    text: `${username()} upgraded ${perkNames[perk]} to Rank ${guild.perks[perk]}!`,
+    text: `${username()} upgraded ${perkNames[perk]} to Level ${guild.perks[perk]}.`,
     timestamp: Date.now(),
     isSystem: true,
   });
 
   await saveGuilds(guilds);
   return { guild, perk, level: guild.perks[perk] };
+}
+
+export async function donateToGuild(coins: number, shards: number) {
+  const guilds = await loadGuilds();
+  const guild = guilds.find(g => g.members.some(m => m.username === username()));
+  if (!guild) throw new Error('You are not in a guild.');
+  const member = guild.members.find(m => m.username === username());
+  if (!member) throw new Error('Guild member not found.');
+
+  const safeCoins = Math.max(0, Math.floor(coins || 0));
+  const safeShards = Math.max(0, Math.floor(shards || 0));
+
+  const tokenGain = Math.floor(safeCoins / 500) * 5 + safeShards * 5;
+  const xpGain = Math.floor(safeCoins / 50) + safeShards * 25;
+  if (tokenGain <= 0 && xpGain <= 0) {
+    throw new Error('Donation must be at least 500 Coins or 1 Shard.');
+  }
+
+  member.contribution += safeCoins + (safeShards * 1000);
+  guild.xp += xpGain;
+  guild.level = 1 + Math.floor(guild.xp / 500);
+  guild.tokens = (guild.tokens ?? 0) + tokenGain;
+
+  if (!guild.chat) guild.chat = [];
+  const parts: string[] = [];
+  if (safeCoins > 0) parts.push(`${safeCoins.toLocaleString()} Coins`);
+  if (safeShards > 0) parts.push(`${safeShards} Shards`);
+
+  guild.chat.push({
+    id: `msg-${Date.now()}-donate`,
+    username: 'System',
+    text: `${username()} donated ${parts.join(' and ')} (+${tokenGain} Tokens, +${xpGain} Guild XP).`,
+    timestamp: Date.now(),
+    isSystem: true,
+  });
+
+  await saveGuilds(guilds);
+  return { guild, tokensEarned: tokenGain, xpEarned: xpGain };
 }
 
 export async function createGuild(name: string, tag: string) {
@@ -109,7 +190,7 @@ export async function createGuild(name: string, tag: string) {
     chat: [{
       id: `msg-${Date.now()}`,
       username: 'System',
-      text: `Guild [${cleanTag}] ${cleanName} was founded!`,
+      text: `Guild [${cleanTag}] ${cleanName} created.`,
       timestamp: Date.now(),
       isSystem: true,
     }],
@@ -142,17 +223,39 @@ export async function joinGuild(guildId: string) {
 
 export async function leaveGuild() {
   const guilds = await loadGuilds();
-  const guild = guilds.find(g => g.members.some(m => m.username === username()));
-  if (!guild) throw new Error('You are not in a guild.');
+  const guildIndex = guilds.findIndex(g => g.members.some(m => m.username === username()));
+  if (guildIndex === -1) throw new Error('You are not in a guild.');
+  const guild = guilds[guildIndex];
+  const oldMember = guild.members.find(m => m.username === username());
   guild.members = guild.members.filter(m => m.username !== username());
-  if (!guild.chat) guild.chat = [];
-  guild.chat.push({
-    id: `msg-${Date.now()}`,
-    username: 'System',
-    text: `${username()} left the guild.`,
-    timestamp: Date.now(),
-    isSystem: true,
-  });
+
+  if (guild.members.length === 0) {
+    // Delete empty guild
+    guilds.splice(guildIndex, 1);
+  } else {
+    // Promote new owner if owner left
+    if (oldMember?.role === 'owner') {
+      const topMember = [...guild.members].sort((a, b) => b.contribution - a.contribution)[0];
+      topMember.role = 'owner';
+      if (!guild.chat) guild.chat = [];
+      guild.chat.push({
+        id: `msg-${Date.now()}-owner`,
+        username: 'System',
+        text: `${topMember.username} is now the guild owner.`,
+        timestamp: Date.now(),
+        isSystem: true,
+      });
+    }
+    if (!guild.chat) guild.chat = [];
+    guild.chat.push({
+      id: `msg-${Date.now()}`,
+      username: 'System',
+      text: `${username()} left the guild.`,
+      timestamp: Date.now(),
+      isSystem: true,
+    });
+  }
+
   await saveGuilds(guilds);
   return { success: true };
 }
@@ -176,30 +279,184 @@ export async function postGuildMessage(text: string) {
   return msg;
 }
 
-export async function contribute(value: number) {
-  if (value <= 0) return;
-  const guilds = await loadGuilds();
-  const guild = guilds.find(g => g.members.some(m => m.username === username()));
-  if (!guild) return;
-  const member = guild.members.find(m => m.username === username());
-  if (!member) return;
-  member.contribution += value;
-  guild.xp += Math.max(1, Math.floor(value / 100));
-  guild.level = 1 + Math.floor(guild.xp / 100);
-  guild.tokens += Math.max(1, Math.floor(value / 10000));
+export async function contribute(value: number, rollCount = 1) {
+  try {
+    if (value <= 0) return;
+    const guilds = await loadGuilds();
+    const guild = guilds.find(g => g.members.some(m => m.username === username()));
+    if (!guild) return;
+    const member = guild.members.find(m => m.username === username());
+    if (!member) return;
+    member.contribution += value;
+  guild.xp += Math.max(1, Math.floor(value / 250));
+  guild.level = 1 + Math.floor(guild.xp / 500);
+  guild.tokens += Math.max(1, Math.floor(value / 25000));
 
   // Progress guild challenge
   if (guild.challenge) {
     if (guild.challenge.type === 'value') {
-      guild.challenge.progress = Math.min(guild.challenge.target, guild.challenge.progress + value);
+      guild.challenge.progress += value;
     } else if (guild.challenge.type === 'rolls') {
-      guild.challenge.progress = Math.min(guild.challenge.target, guild.challenge.progress + 1);
+      guild.challenge.progress += rollCount;
     } else if (guild.challenge.type === 'rare' && value >= 100) {
-      guild.challenge.progress = Math.min(guild.challenge.target, guild.challenge.progress + 1);
+      guild.challenge.progress += 1;
+    }
+
+    // Check challenge completion
+    if (guild.challenge.progress >= guild.challenge.target) {
+      const reward = guild.challenge.reward;
+      guild.tokens += reward;
+      if (!guild.chat) guild.chat = [];
+      guild.chat.push({
+        id: `msg-${Date.now()}-challenge`,
+        username: 'System',
+        text: `Guild challenge completed! +${reward} Guild Tokens added to treasury.`,
+        timestamp: Date.now(),
+        isSystem: true,
+      });
+
+      // Cycle to next challenge
+      const nextIdx = (CHALLENGE_POOL.findIndex(c => c.type === guild.challenge.type) + 1) % CHALLENGE_POOL.length;
+      guild.challenge = { ...CHALLENGE_POOL[nextIdx], progress: 0 };
     }
   }
 
-  await saveGuilds(guilds);
+    // Guild Raid Boss damage contribution
+    if (guild.boss && !guild.boss.defeated) {
+      const damage = Math.round(value + rollCount * 25);
+      guild.boss.currentHp = Math.max(0, guild.boss.currentHp - damage);
+      if (!guild.boss.contributors) guild.boss.contributors = {};
+      guild.boss.contributors[username()] = (guild.boss.contributors[username()] ?? 0) + damage;
+
+      if (guild.boss.currentHp <= 0) {
+        guild.boss.defeated = true;
+        const tokensReward = guild.boss.rewardTokens;
+        guild.tokens += tokensReward;
+        if (!guild.chat) guild.chat = [];
+        guild.chat.push({
+          id: `msg-${Date.now()}-boss`,
+          username: 'System',
+          text: `🏆 RAID BOSS SLAIN! ${guild.boss.name} was defeated! +${tokensReward} Guild Tokens added to treasury!`,
+          timestamp: Date.now(),
+          isSystem: true,
+        });
+      }
+    }
+
+    await saveGuilds(guilds);
+  } catch (err) {
+    console.error('Error in guild contribution:', err);
+  }
+}
+
+// Community World Event System
+export async function getCommunityEvent(): Promise<WorldEvent> {
+  const raw = await redis.get(key('community_event'));
+  let ev: WorldEvent;
+  if (!raw) {
+    ev = { ...COMMUNITY_WORLD_EVENT };
+    await redis.set(key('community_event'), JSON.stringify(ev));
+  } else {
+    ev = JSON.parse(raw) as WorldEvent;
+  }
+  if (!ev.buffMultiplier) {
+    ev.buffMultiplier = 1.15;
+  }
+
+  // Automatic Weekly Reset: Every week (Sunday 00:00 UTC / 7-day cycle) the community milestone resets!
+  const now = Date.now();
+  const currentWeekNumber = Math.floor(now / 604_800_000);
+  if (ev.weekId !== currentWeekNumber || now >= ev.endsAt) {
+    ev.weekId = currentWeekNumber;
+    ev.id = `world-event-w${currentWeekNumber}`;
+    ev.title = 'Weekly Community Milestone';
+    ev.description = 'Community rolls contributed this week toward dynamic tier goals.';
+    ev.goal = 100_000;
+    ev.currentProgress = 0;
+    ev.tier = 1;
+    ev.buffMultiplier = 1.15;
+    ev.buffDescription = '+15% Global Luck Active';
+    ev.endsAt = (currentWeekNumber + 1) * 604_800_000;
+    ev.completed = false;
+    await redis.set(key('community_event'), JSON.stringify(ev));
+  }
+
+  // Smooth rolling background simulated progress (community activity)
+  const lastTickRaw = await redis.get(key('community_event_tick'));
+  const now = Date.now();
+  const lastTick = lastTickRaw ? parseInt(lastTickRaw, 10) : now;
+  const elapsedSec = Math.max(0, Math.floor((now - lastTick) / 1000));
+  if (elapsedSec >= 4) {
+    const naturalRolls = Math.floor(elapsedSec * 0.5);
+    if (naturalRolls > 0) {
+      ev.currentProgress += naturalRolls;
+      while (ev.currentProgress >= ev.goal) {
+        ev.tier = (ev.tier || 1) + 1;
+        ev.goal = Math.round(ev.goal * 2.2);
+        ev.buffMultiplier = Number((1.10 + Math.min(10, ev.tier) * 0.05).toFixed(2));
+        ev.buffDescription = `+${Math.round((ev.buffMultiplier - 1) * 100)}% Global Luck Active`;
+      }
+      await redis.set(key('community_event'), JSON.stringify(ev));
+    }
+    await redis.set(key('community_event_tick'), String(now));
+  }
+  return ev;
+}
+
+export async function addCommunityRolls(rolls: number): Promise<WorldEvent> {
+  const ev = await getCommunityEvent();
+  ev.currentProgress += rolls;
+  while (ev.currentProgress >= ev.goal) {
+    ev.tier = (ev.tier || 1) + 1;
+    ev.goal = Math.round(ev.goal * 2.2);
+    ev.buffMultiplier = Number((1.10 + Math.min(10, ev.tier) * 0.05).toFixed(2));
+    ev.buffDescription = `+${Math.round((ev.buffMultiplier - 1) * 100)}% Global Luck Active`;
+  }
+  await redis.set(key('community_event'), JSON.stringify(ev));
+  return ev;
+}
+
+export async function setCommunityEventConfig(config: {
+  goal?: number;
+  progress?: number;
+  addRolls?: number;
+  tier?: number;
+  buffMultiplier?: number;
+  reset?: boolean;
+}): Promise<WorldEvent> {
+  const ev = await getCommunityEvent();
+  if (config.reset) {
+    ev.currentProgress = 0;
+    ev.goal = 100_000;
+    ev.tier = 1;
+    ev.buffMultiplier = 1.15;
+    ev.buffDescription = '+15% Global Luck Active';
+    ev.completed = false;
+  }
+  if (typeof config.goal === 'number' && config.goal > 0) {
+    ev.goal = config.goal;
+  }
+  if (typeof config.progress === 'number' && config.progress >= 0) {
+    ev.currentProgress = config.progress;
+  }
+  if (typeof config.tier === 'number' && config.tier > 0) {
+    ev.tier = config.tier;
+  }
+  if (typeof config.buffMultiplier === 'number' && config.buffMultiplier >= 1) {
+    ev.buffMultiplier = config.buffMultiplier;
+    ev.buffDescription = `+${Math.round((ev.buffMultiplier - 1) * 100)}% Global Luck Active`;
+  }
+  if (typeof config.addRolls === 'number' && config.addRolls > 0) {
+    ev.currentProgress += config.addRolls;
+  }
+  while (ev.currentProgress >= ev.goal) {
+    ev.tier = (ev.tier || 1) + 1;
+    ev.goal = Math.round(ev.goal * 2.2);
+    ev.buffMultiplier = Number((1.10 + Math.min(10, ev.tier) * 0.05).toFixed(2));
+    ev.buffDescription = `+${Math.round((ev.buffMultiplier - 1) * 100)}% Global Luck Active`;
+  }
+  await redis.set(key('community_event'), JSON.stringify(ev));
+  return ev;
 }
 
 export async function leaderboard(): Promise<LeaderboardEntry[]> {

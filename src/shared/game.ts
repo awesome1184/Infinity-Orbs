@@ -1,4 +1,103 @@
-export type UpgradeId = 'speed' | 'multi' | 'auto' | 'luck';
+export type UpgradeId =
+  | 'speed'
+  | 'multi'
+  | 'auto'
+  | 'luck'
+  | 'coinBonus'
+  | 'shardChance'
+  | 'xpBonus'
+  | 'critChance'
+  | 'critPower'
+  | 'offlineRate'
+  | 'valueBonus';
+
+export type MasterySkillId =
+  | 'continuumLuck'
+  | 'prosperity'
+  | 'shardAttunement'
+  | 'critMastery'
+  | 'chronoFlow'
+  | 'infiniteVault'
+  | 'cosmicAttunement'
+  | 'celestialSurge'
+  | 'pityAccelerant'
+  | 'apexFortune';
+
+export interface MasterySkillInfo {
+  name: string;
+  desc: string;
+  maxLevel: number;
+  costMultiplier: number;
+}
+
+export const MASTERY_SKILLS: Record<MasterySkillId, MasterySkillInfo> = {
+  continuumLuck: {
+    name: 'Continuum Attunement',
+    desc: '+3% luck per level.',
+    maxLevel: 50,
+    costMultiplier: 1,
+  },
+  prosperity: {
+    name: 'Midas Touch',
+    desc: '+10% coins earned per level.',
+    maxLevel: 30,
+    costMultiplier: 1,
+  },
+  shardAttunement: {
+    name: 'Shard Resonance',
+    desc: '+0.3% shard drop chance on rolls per level.',
+    maxLevel: 25,
+    costMultiplier: 2,
+  },
+  critMastery: {
+    name: 'Critical Overdrive',
+    desc: '+2% critical chance and +0.2x crit multiplier per level.',
+    maxLevel: 25,
+    costMultiplier: 2,
+  },
+  chronoFlow: {
+    name: 'Chrono Flow',
+    desc: '-50ms cooldown floor per level.',
+    maxLevel: 20,
+    costMultiplier: 2,
+  },
+  infiniteVault: {
+    name: 'Vault Architecture',
+    desc: '+150 offline roll capacity per level.',
+    maxLevel: 30,
+    costMultiplier: 1,
+  },
+  cosmicAttunement: {
+    name: 'Cosmic Affinity',
+    desc: '+5% cosmic dust earned on prestige per level.',
+    maxLevel: 20,
+    costMultiplier: 3,
+  },
+  celestialSurge: {
+    name: 'Codex Devotion',
+    desc: '+1% permanent luck for every 5 unique orbs discovered per level.',
+    maxLevel: 10,
+    costMultiplier: 3,
+  },
+  pityAccelerant: {
+    name: 'Pity Calibration',
+    desc: 'Pity luck meter requires 2 fewer dry rolls per level.',
+    maxLevel: 5,
+    costMultiplier: 4,
+  },
+  apexFortune: {
+    name: 'Apex Fortune',
+    desc: '4% chance per level on multi-rolls to double the luck of that activation.',
+    maxLevel: 15,
+    costMultiplier: 3,
+  },
+};
+
+export function masterySkillCost(id: MasterySkillId, currentLevel: number): number {
+  const mult = MASTERY_SKILLS[id]?.costMultiplier ?? 1;
+  return Math.max(1, Math.round(mult * (1 + currentLevel * 1.5)));
+}
+
 export type PrestigeUpgradeId =
   | 'permLuck'
   | 'permSpeed'
@@ -7,6 +106,10 @@ export type PrestigeUpgradeId =
   | 'sonarPing'
   | 'instantReveal'
   | 'autoOverclock'
+  | 'autoFilter'
+  | 'resonanceMeter'
+  | 'stellarMagnet'
+  | 'chronoOverdrive'
   | 'transmutation'
   | 'shardSynthesis';
 
@@ -16,6 +119,7 @@ export interface Orb {
   tier: string;
   name: string;
   isNew?: boolean;
+  isCrit?: boolean;
 }
 
 export interface QuestItem {
@@ -44,6 +148,9 @@ export interface PlayerState {
   level: number;
   xp: number;
   totalRolls: number;
+  totalCrits: number;
+  lifetimeCoins: number;
+  lifetimeShards: number;
   highestRarity: number;
   collectionValue: number;
   lifetimeCollectionValue: number;
@@ -64,6 +171,22 @@ export interface PlayerState {
   activeCosmetic: string;
   unlockedCosmetics: string[];
   turboRollUntil: number; // timestamp
+  currentRunRolls?: number;
+  questsCompleted?: number;
+  guildContribution?: number;
+  sacrifices?: {
+    coinsSacrificed: number;
+    shardsSacrificed: number;
+    altarLevel: number;
+    luckSurgeUntil?: number; // timestamp
+  };
+  masteryPoints?: number;
+  masterySkills?: Record<MasterySkillId, number>;
+  guildPerks?: {
+    luckRank: number;
+    speedRank: number;
+    vaultRank: number;
+  };
 }
 
 export interface RollResponse {
@@ -221,12 +344,12 @@ export interface CosmeticItem {
 }
 
 export const COSMETICS_LIST: CosmeticItem[] = [
-  { id: 'default', name: 'Astral Classic', desc: 'Classic cosmic orb style.', costCoins: 0, costShards: 0 },
-  { id: 'galaxy', name: 'Galaxy Void', desc: 'Swirling spiral galaxy aura.', costCoins: 1000, costShards: 0 },
-  { id: 'solar', name: 'Solar Corona', desc: 'Sun flares and radiant corona.', costCoins: 5000, costShards: 5 },
-  { id: 'cyber', name: 'Neon Cyberpunk', desc: 'Digital grid and pulsing matrix.', costCoins: 15000, costShards: 15 },
-  { id: 'emerald', name: 'Emerald Aether', desc: 'Green crystalline orbiters.', costCoins: 50000, costShards: 30 },
-  { id: 'divine', name: 'Divine Prismatic', desc: 'Golden halos and light rays.', costCoins: 250000, costShards: 100 },
+  { id: 'default', name: 'Classic', desc: 'Default orb skin.', costCoins: 0, costShards: 0 },
+  { id: 'galaxy', name: 'Galaxy', desc: 'Galaxy orb skin.', costCoins: 1000, costShards: 0 },
+  { id: 'solar', name: 'Solar', desc: 'Solar orb skin.', costCoins: 5000, costShards: 5 },
+  { id: 'cyber', name: 'Cyber', desc: 'Cyberpunk orb skin.', costCoins: 15000, costShards: 15 },
+  { id: 'emerald', name: 'Emerald', desc: 'Emerald orb skin.', costCoins: 50000, costShards: 30 },
+  { id: 'divine', name: 'Prismatic', desc: 'Prismatic orb skin.', costCoins: 250000, costShards: 100 },
 ];
 
 export const COSMETICS = COSMETICS_LIST;
@@ -243,66 +366,97 @@ export interface PrestigeUpgradeInfo {
 export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeInfo> = {
   permLuck: {
     name: 'Permanent Luck',
-    desc: '+5% luck on all future rolls.',
+    desc: '+5% luck per level.',
     category: 'core',
     maxLevel: 10,
     costPerLevel: 2,
   },
   permSpeed: {
     name: 'Permanent Speed Floor',
-    desc: '-150ms lower cooldown limit.',
+    desc: '-150ms cooldown floor per level.',
     category: 'core',
     maxLevel: 5,
     costPerLevel: 3,
   },
   vaultCap: {
     name: 'Vault Expansion',
-    desc: '+250 offline roll storage capacity.',
+    desc: '+250 offline roll capacity per level.',
     category: 'core',
     maxLevel: 5,
     costPerLevel: 1,
   },
   dustBounty: {
     name: 'Cosmic Dust Bounty',
-    desc: '+10% bonus Dust earned on prestiges.',
+    desc: '+10% Cosmic Dust from prestige per level.',
     category: 'core',
     maxLevel: 5,
     costPerLevel: 5,
   },
   sonarPing: {
-    name: 'Celestial Sonar',
-    desc: 'Silent Mode with Rare Pings: Mutes routine rolls and pings a crystal chime whenever you roll a Rare or higher orb.',
+    name: 'Silent Alert Mode',
+    desc: 'Mute normal rolls. Play audio alert on Rare+ orbs.',
     category: 'qol',
     maxLevel: 1,
     costPerLevel: 2,
     qol: true,
   },
   instantReveal: {
-    name: 'Chrono-Skip',
-    desc: 'Quick Roll: Unlocks an Instant Batch toggle that bypasses roll animation delays for instantaneous batch reveals.',
+    name: 'Skip Animations',
+    desc: 'Skip roll animation delays.',
     category: 'qol',
     maxLevel: 1,
     costPerLevel: 2,
     qol: true,
   },
   autoOverclock: {
-    name: 'Hyper-Automation',
-    desc: 'Auto-roll runs 3% faster per rank and continues rolling without interruption.',
+    name: 'Auto-Roll Speed',
+    desc: 'Auto-roll is 3% faster per level.',
     category: 'qol',
     maxLevel: 5,
     costPerLevel: 2,
     qol: true,
   },
+  autoFilter: {
+    name: 'Common Salvage',
+    desc: '+25% coins from Common and Uncommon rolls.',
+    category: 'qol',
+    maxLevel: 1,
+    costPerLevel: 3,
+    qol: true,
+  },
+  resonanceMeter: {
+    name: 'Dry Streak Luck',
+    desc: '+1% luck for every 20 rolls without a Rare+ orb.',
+    category: 'qol',
+    maxLevel: 3,
+    costPerLevel: 3,
+    qol: true,
+  },
+  stellarMagnet: {
+    name: 'Multi-Roll Extra',
+    desc: '10% chance per level to roll +2 extra orbs on multi-roll.',
+    category: 'core',
+    maxLevel: 5,
+    costPerLevel: 3,
+  },
+  chronoOverdrive: {
+    name: 'Turbo Duration',
+    desc: 'Turbo lasts 60m with 30% cooldown reduction.',
+    category: 'alchemy',
+    maxLevel: 2,
+    costPerLevel: 4,
+    qol: true,
+  },
   transmutation: {
-    name: 'Alchemical Transmutation',
-    desc: 'Common & Uncommon rolls award +15% extra coins and have a 1% chance per rank to yield bonus Shards.',
+    name: 'Transmutation',
+    desc: '+15% coins and 1% shard chance on low rarity rolls per level.',
     category: 'alchemy',
     maxLevel: 5,
     costPerLevel: 3,
   },
   shardSynthesis: {
-    name: 'Astral Forge',
-    desc: 'Unlocks the Astral Forge in the Prestige menu to transmute 10 Shards into 1 Cosmic Dust anytime.',
+    name: 'Dust Synthesis',
+    desc: 'Convert 10 Shards into 1 Cosmic Dust.',
     category: 'alchemy',
     maxLevel: 1,
     costPerLevel: 4,
@@ -312,20 +466,20 @@ export const PRESTIGE_UPGRADES: Record<PrestigeUpgradeId, PrestigeUpgradeInfo> =
 
 export function createInitialDailyQuests(): QuestItem[] {
   return [
-    { id: 'daily-rolls-25', title: 'Warm-Up', desc: 'Perform 25 rolls', target: 25, progress: 0, rewardCoins: 100, rewardXp: 50, claimed: false },
-    { id: 'daily-rolls-100', title: 'Dedicated', desc: 'Perform 100 rolls', target: 100, progress: 0, rewardCoins: 500, rewardShards: 2, rewardXp: 150, claimed: false },
-    { id: 'daily-rare-100', title: 'Lucky Day', desc: 'Obtain an Orb with rarity 1/100 or higher', target: 1, progress: 0, rewardCoins: 300, rewardXp: 100, claimed: false },
-    { id: 'daily-unique-3', title: 'Collector', desc: 'Obtain 3 unique Orbs today', target: 3, progress: 0, rewardCoins: 200, rewardXp: 80, claimed: false },
-    { id: 'daily-social', title: 'Guild Visitor', desc: 'Open guilds or leaderboards', target: 1, progress: 0, rewardCoins: 150, rewardTokens: 10, rewardXp: 50, claimed: false },
+    { id: 'daily-rolls-25', title: 'Roll 25 Times', desc: 'Perform 25 rolls', target: 25, progress: 0, rewardCoins: 100, rewardXp: 50, claimed: false },
+    { id: 'daily-rolls-100', title: 'Roll 100 Times', desc: 'Perform 100 rolls', target: 100, progress: 0, rewardCoins: 500, rewardShards: 2, rewardXp: 150, claimed: false },
+    { id: 'daily-rare-100', title: 'Find Rare Orb', desc: 'Obtain an orb with 1/100+ rarity', target: 1, progress: 0, rewardCoins: 300, rewardXp: 100, claimed: false },
+    { id: 'daily-unique-3', title: 'Unique Orbs', desc: 'Obtain 3 unique orbs today', target: 3, progress: 0, rewardCoins: 200, rewardXp: 80, claimed: false },
+    { id: 'daily-social', title: 'Guild Activity', desc: 'View guild or leaderboard', target: 1, progress: 0, rewardCoins: 150, rewardTokens: 10, rewardXp: 50, claimed: false },
   ];
 }
 
 export function createInitialWeeklyQuests(): QuestItem[] {
   return [
-    { id: 'weekly-grind', title: 'The Grind', desc: 'Perform 1,000 rolls this week', target: 1000, progress: 0, rewardCoins: 5000, rewardShards: 15, rewardXp: 600, claimed: false },
-    { id: 'weekly-epic', title: 'Rare Find', desc: 'Obtain an Epic Orb (1/1,000+) this week', target: 1, progress: 0, rewardCoins: 3000, rewardShards: 10, rewardXp: 400, claimed: false },
-    { id: 'weekly-guild', title: 'Guild Duty', desc: 'Contribute 10,000 collection value', target: 10000, progress: 0, rewardCoins: 4000, rewardTokens: 50, rewardXp: 500, claimed: false },
-    { id: 'weekly-share', title: 'Show-Off', desc: 'Share an Orb or milestone to Reddit', target: 1, progress: 0, rewardCoins: 1500, rewardShards: 5, rewardXp: 200, claimed: false },
+    { id: 'weekly-grind', title: 'Weekly Rolls', desc: 'Perform 1,000 rolls this week', target: 1000, progress: 0, rewardCoins: 5000, rewardShards: 15, rewardXp: 600, claimed: false },
+    { id: 'weekly-epic', title: 'Find Epic Orb', desc: 'Obtain an Epic orb (1/1,000+)', target: 1, progress: 0, rewardCoins: 3000, rewardShards: 10, rewardXp: 400, claimed: false },
+    { id: 'weekly-guild', title: 'Collection Value', desc: 'Contribute 10,000 collection value', target: 10000, progress: 0, rewardCoins: 4000, rewardTokens: 50, rewardXp: 500, claimed: false },
+    { id: 'weekly-share', title: 'Share Post', desc: 'Share an orb to Reddit', target: 1, progress: 0, rewardCoins: 1500, rewardShards: 5, rewardXp: 200, claimed: false },
   ];
 }
 
@@ -338,6 +492,9 @@ export function createInitialState(now = Date.now()): PlayerState {
     level: 1,
     xp: 0,
     totalRolls: 0,
+    totalCrits: 0,
+    lifetimeCoins: 50,
+    lifetimeShards: 5,
     highestRarity: 0,
     collectionValue: 0,
     lifetimeCollectionValue: 0,
@@ -346,9 +503,35 @@ export function createInitialState(now = Date.now()): PlayerState {
     lastSeenAt: now,
     offlineRolls: 0,
     claimedAchievements: [],
-    upgrades: { speed: 0, multi: 0, auto: 0, luck: 0 },
+    upgrades: {
+      speed: 0,
+      multi: 0,
+      auto: 0,
+      luck: 0,
+      coinBonus: 0,
+      shardChance: 0,
+      xpBonus: 0,
+      critChance: 0,
+      critPower: 0,
+      offlineRate: 0,
+      valueBonus: 0,
+    },
     prestigeCount: 0,
-    prestigeUpgrades: { permLuck: 0, permSpeed: 0, vaultCap: 0, dustBounty: 0 },
+    prestigeUpgrades: {
+      permLuck: 0,
+      permSpeed: 0,
+      vaultCap: 0,
+      dustBounty: 0,
+      sonarPing: 0,
+      instantReveal: 0,
+      autoOverclock: 0,
+      autoFilter: 0,
+      resonanceMeter: 0,
+      stellarMagnet: 0,
+      chronoOverdrive: 0,
+      transmutation: 0,
+      shardSynthesis: 0,
+    },
     streak: { count: 1, lastClaimDate: '', longestStreak: 1 },
     dailyQuests: createInitialDailyQuests(),
     weeklyQuests: createInitialWeeklyQuests(),
@@ -358,30 +541,74 @@ export function createInitialState(now = Date.now()): PlayerState {
     activeCosmetic: 'default',
     unlockedCosmetics: ['default'],
     turboRollUntil: 0,
+    currentRunRolls: 0,
+    questsCompleted: 0,
+    guildContribution: 0,
+    sacrifices: {
+      coinsSacrificed: 0,
+      shardsSacrificed: 0,
+      altarLevel: 0,
+      luckSurgeUntil: 0,
+    },
+    masteryPoints: 0,
+    masterySkills: {
+      continuumLuck: 0,
+      prosperity: 0,
+      shardAttunement: 0,
+      critMastery: 0,
+      chronoFlow: 0,
+      infiniteVault: 0,
+      cosmicAttunement: 0,
+      celestialSurge: 0,
+      pityAccelerant: 0,
+      apexFortune: 0,
+    },
+    guildPerks: { luckRank: 0, speedRank: 0, vaultRank: 0 },
   };
 }
 
-export const BASE_COOLDOWN_MS = 5_000;
-export const AUTO_UNLOCK_COST = 150;
-export const MAX_OFFLINE_ROLLS = 10_000;
+// Paced cooldown and offline tick (slowed down for balanced, long-term progression)
+export const BASE_COOLDOWN_MS = 8_000;
+export const AUTO_UNLOCK_COST = 200;
+export const MAX_OFFLINE_ROLLS = 1_000;
+export const OFFLINE_TICK_MS = 60_000; // 1 offline roll every 60 seconds
 
 export const SHARD_SYNTHESIS_COST = 10;
 
+export function effectiveOfflineTickMs(s: PlayerState): number {
+  const rateReduction = (s.upgrades.offlineRate ?? 0) * 0.08;
+  return Math.max(20_000, Math.round(OFFLINE_TICK_MS * (1 - Math.min(0.6, rateReduction))));
+}
+
+export function critMultiplier(s: PlayerState): number {
+  const masteryCritPower = (s.masterySkills?.critMastery ?? 0) * 0.20;
+  return 2.0 + (s.upgrades.critPower ?? 0) * 0.25 + masteryCritPower;
+}
+
 export function cooldownMs(s: PlayerState, isAuto = false) {
   const permReduction = (s.prestigeUpgrades?.permSpeed ?? 0) * 150;
-  let cd = Math.max(800, Math.round((BASE_COOLDOWN_MS - permReduction) * Math.pow(0.88, s.upgrades.speed)));
+  const guildSpeedReduction = (s.guildPerks?.speedRank ?? 0) * 40;
+  const masteryChronoReduction = (s.masterySkills?.chronoFlow ?? 0) * 50;
+  let cd = Math.max(
+    800,
+    Math.round(
+      (BASE_COOLDOWN_MS - permReduction - guildSpeedReduction - masteryChronoReduction) *
+        Math.pow(0.92, s.upgrades.speed ?? 0)
+    )
+  );
   if (isAuto && (s.prestigeUpgrades?.autoOverclock ?? 0) > 0) {
     const overclockFactor = 1 - (s.prestigeUpgrades.autoOverclock * 0.03);
-    cd = Math.max(600, Math.round(cd * overclockFactor));
+    cd = Math.max(700, Math.round(cd * overclockFactor));
   }
   if (s.turboRollUntil && Date.now() < s.turboRollUntil) {
-    cd = Math.max(600, Math.round(cd * 0.8));
+    const turboReduction = (s.prestigeUpgrades?.chronoOverdrive ?? 0) > 0 ? 0.70 : 0.80;
+    cd = Math.max(600, Math.round(cd * turboReduction));
   }
   return cd;
 }
 
 export function rollsPerActivation(s: PlayerState) {
-  const steps = [1, 2, 3, 5, 10, 25, 50, 100];
+  const steps = [1, 2, 3, 5, 8, 12, 20, 50, 100];
   const level = s.upgrades.multi ?? 0;
   return steps[Math.min(steps.length - 1, level)];
 }
@@ -393,45 +620,93 @@ export function autoUnlocked(s: PlayerState) {
 export function luckMultiplier(s: PlayerState) {
   const permBonus = (s.prestigeUpgrades?.permLuck ?? 0) * 0.05;
   const levelBonus = Math.max(0, (s.level || 1) - 1) * 0.01;
-  return 1 + (s.upgrades.luck ?? 0) * 0.08 + permBonus + levelBonus;
+  const guildLuckBonus = (s.guildPerks?.luckRank ?? 0) * 0.02;
+
+  // Sacrificial Altar Devotion Luck
+  const altarDevotionLuck = (s.sacrifices?.altarLevel ?? 0) * 0.01;
+  const shardInfusionLuck = (s.sacrifices?.shardsSacrificed ?? 0) * 0.02;
+  const isSurgeActive = Boolean(s.sacrifices?.luckSurgeUntil && Date.now() < s.sacrifices.luckSurgeUntil);
+  const surgeLuck = isSurgeActive ? 0.25 : 0;
+
+  // Celestial Mastery Tree Luck
+  const masteryLuck = (s.masterySkills?.continuumLuck ?? 0) * 0.03;
+  const codexTier = Math.floor(Object.keys(s.collection || {}).length / 5);
+  const codexDevotionLuck = (s.masterySkills?.celestialSurge ?? 0) * (codexTier * 0.01);
+
+  let resonanceBonus = 0;
+  if ((s.prestigeUpgrades?.resonanceMeter ?? 0) > 0) {
+    const dryRolls = s.rollsSinceBest ?? 0;
+    const interval = Math.max(8, 20 - (s.masterySkills?.pityAccelerant ?? 0) * 2);
+    resonanceBonus = s.prestigeUpgrades.resonanceMeter * (Math.min(100, Math.floor(dryRolls / interval)) * 0.01);
+  }
+
+  return (
+    1 +
+    (s.upgrades.luck ?? 0) * 0.08 +
+    permBonus +
+    levelBonus +
+    guildLuckBonus +
+    altarDevotionLuck +
+    shardInfusionLuck +
+    surgeLuck +
+    masteryLuck +
+    codexDevotionLuck +
+    resonanceBonus
+  );
 }
 
 export function offlineRollCap(s: PlayerState) {
   const permVaultBonus = (s.prestigeUpgrades?.vaultCap ?? 0) * 250;
-  return Math.min(MAX_OFFLINE_ROLLS, Math.round((60 + (s.upgrades.auto ?? 0) * 60) * (1 + s.upgrades.speed * 0.05)) + permVaultBonus);
+  const guildVaultBonus = (s.guildPerks?.vaultRank ?? 0) * 100;
+  return Math.min(
+    MAX_OFFLINE_ROLLS,
+    Math.round((30 + (s.upgrades.auto ?? 0) * 20) * (1 + (s.upgrades.speed ?? 0) * 0.04)) +
+      permVaultBonus +
+      guildVaultBonus
+  );
 }
 
 /**
  * Paced coin progression formula.
- * Scales sublinearly with high rarity drops so gold accumulation is steady and meaningful.
  */
 export function coinsForRarity(rarity: number): number {
   if (rarity <= 1) return 1;
-  return Math.max(1, Math.round(Math.pow(rarity, 0.70)));
+  return Math.max(1, Math.round(Math.pow(rarity, 0.68)));
 }
 
 /**
- * Sustainable upgrade costs for steady gold progression
+ * Sustainable upgrade costs
  */
 export function upgradeCost(id: UpgradeId, level: number) {
   if (id === 'auto') return level ? Infinity : AUTO_UNLOCK_COST;
-  const configs: Record<'speed' | 'multi' | 'luck', { base: number; mult: number }> = {
+  const configs: Record<Exclude<UpgradeId, 'auto'>, { base: number; mult: number }> = {
     speed: { base: 35, mult: 1.50 },
     multi: { base: 100, mult: 1.65 },
     luck: { base: 75, mult: 1.55 },
+    coinBonus: { base: 50, mult: 1.45 },
+    shardChance: { base: 150, mult: 1.60 },
+    xpBonus: { base: 45, mult: 1.40 },
+    critChance: { base: 100, mult: 1.55 },
+    critPower: { base: 120, mult: 1.55 },
+    offlineRate: { base: 90, mult: 1.50 },
+    valueBonus: { base: 80, mult: 1.50 },
   };
   const { base, mult } = configs[id];
   return Math.floor(base * Math.pow(mult, level));
 }
 
-// Prestige formula: floor(sqrt(Lifetime Collection Value / 1,000,000))
-export function calculatePrestigeDust(lifetimeCollectionValue: number): number {
-  if (lifetimeCollectionValue < 1_000_000) return 0;
-  return Math.floor(Math.sqrt(lifetimeCollectionValue / 1_000_000));
+// Prestige formula: floor(sqrt(Collection Value / 1,000,000))
+// Strictly based on current prestige run's collection value so you cannot prestige infinitely.
+export function calculatePrestigeDust(collectionValue: number): number {
+  if (!collectionValue || collectionValue < 1_000_000) return 0;
+  return Math.floor(Math.sqrt(collectionValue / 1_000_000));
 }
 
 export function calculateCosmicDust(s: PlayerState): number {
-  const base = calculatePrestigeDust(s.lifetimeCollectionValue);
+  const currentVal = s.collectionValue ?? 0;
+  if (currentVal < 1_000_000) return 0;
+  const base = calculatePrestigeDust(currentVal);
+  if (base <= 0) return 0;
   const bonus = (s.prestigeUpgrades?.dustBounty ?? 0) * 0.1;
   return Math.floor(base * (1 + bonus));
 }
@@ -445,6 +720,10 @@ export function prestigeUpgradeCost(id: PrestigeUpgradeId, level: number): numbe
     sonarPing: 2,
     instantReveal: 2,
     autoOverclock: 2,
+    autoFilter: 3,
+    resonanceMeter: 3,
+    stellarMagnet: 3,
+    chronoOverdrive: 4,
     transmutation: 3,
     shardSynthesis: 4,
   };

@@ -69,9 +69,16 @@ debugRouter.post('/unlock-upgrades', async (req, res) => {
     const s = await loadRaw();
     s.upgrades = {
       speed: 20,
-      multi: 6, // 25 rolls
+      multi: 6,
       auto: 1,
       luck: 20,
+      coinBonus: 10,
+      shardChance: 10,
+      xpBonus: 10,
+      critChance: 10,
+      critPower: 10,
+      offlineRate: 10,
+      valueBonus: 10,
     };
     await save(s);
     res.json({ ok: true, state: s });

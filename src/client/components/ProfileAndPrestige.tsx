@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Sparkles,
   Palette,
@@ -9,6 +9,16 @@ import {
   Archive,
   BarChart3,
   Gem,
+  BellRing,
+  FastForward,
+  Zap,
+  Filter,
+  Compass,
+  Magnet,
+  Flame,
+  Wand2,
+  Hammer,
+  ShieldAlert,
 } from 'lucide-react';
 import type {
   PlayerState,
@@ -20,6 +30,8 @@ import {
   calculateCosmicDust,
   COSMETICS,
   PRESTIGE_UPGRADES,
+  prestigeUpgradeCost,
+  SHARD_SYNTHESIS_COST,
 } from '../../shared/game.js';
 import { sound } from '../sound.js';
 
@@ -27,6 +39,7 @@ interface ProfileAndPrestigeProps {
   state: PlayerState;
   onPrestige: () => Promise<void>;
   onBuyPrestigeUpgrade: (id: PrestigeUpgradeId) => Promise<void>;
+  onSynthesizeDust: () => Promise<void>;
   onBuyCosmetic: (id: string) => Promise<void>;
   busy: boolean;
 }
@@ -35,14 +48,17 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
   state,
   onPrestige,
   onBuyPrestigeUpgrade,
+  onSynthesizeDust,
   onBuyCosmetic,
   busy,
 }) => {
-  const [confirmingPrestige, setConfirmingPrestige] = React.useState(false);
+  const [confirmingPrestige, setConfirmingPrestige] = useState(false);
+  const [filterCategory, setFilterCategory] = useState<'all' | 'qol' | 'core' | 'alchemy'>('all');
   const fmt = (n: number) => n.toLocaleString();
 
+  const currentRunVal = state.collectionValue ?? 0;
   const pendingDust = calculateCosmicDust(state);
-  const canPrestige = pendingDust > 0;
+  const canPrestige = pendingDust > 0 && currentRunVal >= 1_000_000;
 
   const luckRatio = state.highestRarity > 0 ? state.totalRolls / state.highestRarity : 1;
   const luckRating =
@@ -53,6 +69,48 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
       : luckRatio > 2.5
       ? 'Below Average'
       : 'Average';
+
+  const hasForgeUpgrade = (state.prestigeUpgrades?.shardSynthesis ?? 0) > 0;
+  const canSynthesize = (state.shards ?? 0) >= SHARD_SYNTHESIS_COST;
+
+  const upgradeKeys = Object.keys(PRESTIGE_UPGRADES) as PrestigeUpgradeId[];
+  const filteredUpgrades = upgradeKeys.filter(id => {
+    if (filterCategory === 'all') return true;
+    return PRESTIGE_UPGRADES[id].category === filterCategory;
+  });
+
+  const getUpgradeIcon = (id: PrestigeUpgradeId) => {
+    switch (id) {
+      case 'permLuck':
+        return <Clover className="w-4 h-4 text-emerald-400" />;
+      case 'permSpeed':
+        return <Clock className="w-4 h-4 text-cyan-400" />;
+      case 'vaultCap':
+        return <Archive className="w-4 h-4 text-amber-400" />;
+      case 'dustBounty':
+        return <Sparkles className="w-4 h-4 text-fuchsia-400" />;
+      case 'sonarPing':
+        return <BellRing className="w-4 h-4 text-cyan-400 animate-pulse" />;
+      case 'instantReveal':
+        return <FastForward className="w-4 h-4 text-purple-400" />;
+      case 'autoOverclock':
+        return <Zap className="w-4 h-4 text-yellow-400" />;
+      case 'autoFilter':
+        return <Filter className="w-4 h-4 text-emerald-400" />;
+      case 'resonanceMeter':
+        return <Compass className="w-4 h-4 text-indigo-400" />;
+      case 'stellarMagnet':
+        return <Magnet className="w-4 h-4 text-rose-400" />;
+      case 'chronoOverdrive':
+        return <Flame className="w-4 h-4 text-amber-400" />;
+      case 'transmutation':
+        return <Wand2 className="w-4 h-4 text-fuchsia-400" />;
+      case 'shardSynthesis':
+        return <Hammer className="w-4 h-4 text-orange-400" />;
+      default:
+        return <Sparkles className="w-4 h-4 text-fuchsia-400" />;
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -79,19 +137,19 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
               Rolls Since Best
             </span>
             <span className="text-sm font-black text-white block">
-              {fmt(state.rollsSinceBest)}
+              {fmt(state.rollsSinceBest ?? 0)}
             </span>
-            <span className="text-[10px] text-slate-500">Current dry streak</span>
+            <span className="text-[10px] text-slate-500">Dry streak rolls</span>
           </div>
 
           <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3.5">
             <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
-              Lifetime Rolls
+              Run Rolls
             </span>
             <span className="text-sm font-black text-white block">
-              {fmt(state.totalRolls)}
+              {fmt(state.currentRunRolls ?? state.totalRolls)}
             </span>
-            <span className="text-[10px] text-slate-500">Total activations</span>
+            <span className="text-[10px] text-slate-500">Total: {fmt(state.totalRolls)}</span>
           </div>
 
           <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3.5">
@@ -102,6 +160,46 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
               {state.prestigeCount}
             </span>
             <span className="text-[10px] text-slate-500">Resets completed</span>
+          </div>
+
+          <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3.5">
+            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+              Current Run Value
+            </span>
+            <span className="text-sm font-black text-amber-300 block">
+              {fmt(state.collectionValue ?? 0)}
+            </span>
+            <span className="text-[10px] text-slate-500">For prestige</span>
+          </div>
+
+          <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3.5">
+            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+              Quests Completed
+            </span>
+            <span className="text-sm font-black text-emerald-300 block">
+              {state.questsCompleted ?? 0}
+            </span>
+            <span className="text-[10px] text-slate-500">Daily & weekly</span>
+          </div>
+
+          <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3.5">
+            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+              Total Crits
+            </span>
+            <span className="text-sm font-black text-rose-300 block">
+              {fmt(state.totalCrits ?? 0)}
+            </span>
+            <span className="text-[10px] text-slate-500">Critical rolls</span>
+          </div>
+
+          <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3.5">
+            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+              Guild Contribution
+            </span>
+            <span className="text-sm font-black text-purple-300 block">
+              {fmt(state.guildContribution ?? 0)}
+            </span>
+            <span className="text-[10px] text-slate-500">Points & donations</span>
           </div>
         </div>
       </div>
@@ -116,12 +214,12 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg sm:text-xl font-black text-white">Prestige</h2>
-                <span className="text-xs font-bold bg-slate-800 text-fuchsia-300 px-2.5 py-0.5 rounded-full border border-slate-700">
+                <span className="text-xs font-bold bg-fuchsia-500/20 text-fuchsia-300 px-2.5 py-0.5 rounded-full border border-fuchsia-500/30">
                   {fmt(state.cosmicDust)} Cosmic Dust
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Resets coins and basic upgrades. Discovered collection and permanent upgrades are kept.
+                Resets current run collection value, coins, and base upgrades to 0. Permanent upgrades, discovered collection, and cosmetics are kept.
               </p>
             </div>
           </div>
@@ -135,7 +233,7 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
                   void onPrestige();
                 }}
                 disabled={busy}
-                className="px-4 py-2.5 rounded-xl text-xs font-black bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-md active:scale-95 transition-all"
+                className="px-4 py-2.5 rounded-xl text-xs font-black bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-md active:scale-95 transition-all cursor-pointer"
               >
                 Confirm Reset (+{pendingDust} Dust)
               </button>
@@ -144,7 +242,7 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
                   sound.playClick();
                   setConfirmingPrestige(false);
                 }}
-                className="px-3 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all"
+                className="px-3 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
               >
                 Cancel
               </button>
@@ -166,46 +264,152 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
               <span>
                 {canPrestige
                   ? `Prestige (+${pendingDust} Cosmic Dust)`
-                  : 'Requires 1,000,000 Lifetime Collection Value'}
+                  : `Requires 1,000,000 Collection Value (${fmt(currentRunVal)} / 1,000,000)`}
               </span>
             </button>
           )}
         </div>
 
-        {/* Permanent Upgrades */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-          {(Object.keys(PRESTIGE_UPGRADES) as PrestigeUpgradeId[]).map(id => {
+        {/* Shard Synthesis (Unlocks with shardSynthesis prestige upgrade) */}
+        {hasForgeUpgrade && (
+          <div className="bg-gradient-to-r from-slate-950 via-orange-950/20 to-slate-950 border border-orange-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/30 text-orange-400">
+                <Hammer className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-black text-white">Dust Synthesis</h3>
+                  <span className="text-[10px] font-bold uppercase bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">
+                    Active
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Convert 10 Shards into 1 Cosmic Dust.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                sound.playClick();
+                void onSynthesizeDust();
+              }}
+              disabled={!canSynthesize || busy}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap ${
+                canSynthesize
+                  ? 'bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white shadow-lg active:scale-95 cursor-pointer'
+                  : 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Forge 1 Dust ({SHARD_SYNTHESIS_COST} Shards)</span>
+            </button>
+          </div>
+        )}
+
+        {/* Category Filters for Prestige Tree */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <button
+              onClick={() => {
+                sound.playClick();
+                setFilterCategory('all');
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                filterCategory === 'all'
+                  ? 'bg-fuchsia-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white bg-slate-950/60'
+              }`}
+            >
+              All Upgrades ({upgradeKeys.length})
+            </button>
+
+            <button
+              onClick={() => {
+                sound.playClick();
+                setFilterCategory('qol');
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                filterCategory === 'qol'
+                  ? 'bg-cyan-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white bg-slate-950/60'
+              }`}
+            >
+              <BellRing className="w-3.5 h-3.5 text-cyan-400" />
+              <span>QoL & Controls</span>
+            </button>
+
+            <button
+              onClick={() => {
+                sound.playClick();
+                setFilterCategory('core');
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                filterCategory === 'core'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white bg-slate-950/60'
+              }`}
+            >
+              <Clover className="w-3.5 h-3.5 text-purple-400" />
+              <span>Core Power</span>
+            </button>
+
+            <button
+              onClick={() => {
+                sound.playClick();
+                setFilterCategory('alchemy');
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                filterCategory === 'alchemy'
+                  ? 'bg-amber-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white bg-slate-950/60'
+              }`}
+            >
+              <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>Astral Alchemy</span>
+            </button>
+          </div>
+
+          <span className="text-xs font-mono text-fuchsia-300">
+            {fmt(state.cosmicDust)} Dust Available
+          </span>
+        </div>
+
+        {/* Permanent Upgrades Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {filteredUpgrades.map(id => {
             const info: PrestigeUpgradeInfo = PRESTIGE_UPGRADES[id];
             const currentLevel = state.prestigeUpgrades?.[id] ?? 0;
             const isMax = currentLevel >= info.maxLevel;
-            const cost = isMax ? 0 : info.costPerLevel * (currentLevel + 1);
+            const cost = isMax ? 0 : prestigeUpgradeCost(id, currentLevel);
             const canAfford = state.cosmicDust >= cost && !isMax;
-
-            const Icon =
-              id === 'permLuck'
-                ? Clover
-                : id === 'permSpeed'
-                ? Clock
-                : id === 'vaultCap'
-                ? Archive
-                : Sparkles;
 
             return (
               <div
                 key={id}
-                className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between space-y-3"
+                className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between space-y-3 hover:border-slate-700/80 transition-all shadow-md"
               >
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
-                      <Icon className="w-4 h-4 text-fuchsia-400" />
-                      <span className="text-sm font-bold text-white">{info.name}</span>
+                      <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                        {getUpgradeIcon(id)}
+                      </div>
+                      <div>
+                        <span className="text-sm font-bold text-white block">{info.name}</span>
+                        {info.qol && (
+                          <span className="text-[9px] uppercase font-black tracking-wider text-cyan-400 bg-cyan-500/10 px-1.5 py-0.2 rounded">
+                            QoL Feature
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-xs font-bold text-fuchsia-400">
+                    <span className="text-xs font-bold text-fuchsia-400 bg-fuchsia-950/40 border border-fuchsia-800/40 px-2 py-0.5 rounded-lg">
                       Lv {currentLevel}/{info.maxLevel}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">{info.desc}</p>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">{info.desc}</p>
                 </div>
 
                 <button
@@ -214,11 +418,11 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
                     void onBuyPrestigeUpgrade(id);
                   }}
                   disabled={!canAfford || busy || isMax}
-                  className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                     isMax
                       ? 'bg-slate-900 text-slate-500 border border-slate-800 cursor-default'
                       : canAfford
-                      ? 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-md active:scale-95'
+                      ? 'bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-md active:scale-95 cursor-pointer'
                       : 'bg-slate-900 text-slate-500 border border-slate-800/80 cursor-not-allowed'
                   }`}
                 >
@@ -240,12 +444,12 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
         </div>
       </div>
 
-      {/* 3. Cosmetics */}
+      {/* 3. Cosmetics & Customization */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Palette className="w-5 h-5 text-cyan-400" />
-            <h3 className="text-base font-black text-white">Orb Skins</h3>
+            <h3 className="text-base font-black text-white">Orb Skins & Auras</h3>
           </div>
           <span className="text-xs text-slate-400">
             {state.unlockedCosmetics.length}/{COSMETICS.length} Unlocked
@@ -290,7 +494,7 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
                       void onBuyCosmetic(cosmetic.id);
                     }}
                     disabled={isActive || busy}
-                    className={`w-full py-2 rounded-xl text-xs font-bold transition-all ${
+                    className={`w-full py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       isActive
                         ? 'bg-slate-900 text-slate-500 cursor-default'
                         : 'bg-slate-800 hover:bg-slate-700 text-white'
@@ -307,12 +511,14 @@ export const ProfileAndPrestige: React.FC<ProfileAndPrestigeProps> = ({
                     disabled={!canAfford || busy}
                     className={`w-full py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                       canAfford
-                        ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-md active:scale-95'
+                        ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-md active:scale-95 cursor-pointer'
                         : 'bg-slate-900 text-slate-500 cursor-not-allowed'
                     }`}
                   >
                     <Gem className="w-3.5 h-3.5" />
-                    <span>Unlock ({cosmetic.costShards} Shards)</span>
+                    <span>
+                      Unlock ({cosmetic.costShards > 0 ? `${cosmetic.costShards} Shards` : `${fmt(cosmetic.costCoins)} Coins`})
+                    </span>
                   </button>
                 )}
               </div>

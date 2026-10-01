@@ -207,7 +207,87 @@ export const DevDebugModal: React.FC<DevDebugModalProps> = ({
           </div>
         </div>
 
-        {/* 4. Danger Zone */}
+        {/* 4. Community World Event Debug */}
+        <div className="space-y-3 bg-slate-950/70 border border-purple-500/40 rounded-2xl p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              Community Event Control
+            </span>
+            <span className="text-[10px] text-slate-500">Live Dynamic Goal Testing</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                Set Event Goal
+              </label>
+              <div className="flex gap-1">
+                {[1000, 10000, 100000, 1000000].map(g => (
+                  <button
+                    key={g}
+                    onClick={() => sendDebugAction('/api/dev/event', { goal: g })}
+                    disabled={loading}
+                    className="flex-1 py-1 text-[10px] font-mono font-semibold rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800"
+                  >
+                    {g >= 1000000 ? `${g / 1000000}M` : `${g / 1000}K`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                Set Progress
+              </label>
+              <div className="flex gap-1">
+                {[0, 500, 5000, 50000].map(p => (
+                  <button
+                    key={p}
+                    onClick={() => sendDebugAction('/api/dev/event', { progress: p })}
+                    disabled={loading}
+                    className="flex-1 py-1 text-[10px] font-mono font-semibold rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800"
+                  >
+                    {p >= 1000 ? `${p / 1000}K` : p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            <button
+              onClick={() => sendDebugAction('/api/dev/event', { addRolls: 500 })}
+              disabled={loading}
+              className="py-1.5 px-2.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold"
+            >
+              +500 Event Rolls
+            </button>
+            <button
+              onClick={() => sendDebugAction('/api/dev/event', { addRolls: 5000 })}
+              disabled={loading}
+              className="py-1.5 px-2.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold"
+            >
+              +5,000 Event Rolls
+            </button>
+            <button
+              onClick={() => sendDebugAction('/api/dev/event', { addRolls: 50000 })}
+              disabled={loading}
+              className="py-1.5 px-2.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold"
+            >
+              +50,000 Event Rolls
+            </button>
+            <button
+              onClick={() => sendDebugAction('/api/dev/event', { reset: true })}
+              disabled={loading}
+              className="py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+            >
+              Reset Event
+            </button>
+          </div>
+        </div>
+
+        {/* 5. Danger Zone */}
         <div className="space-y-2 bg-rose-950/20 border border-rose-500/30 rounded-2xl p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-rose-300 uppercase tracking-wider">

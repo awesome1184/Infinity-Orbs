@@ -14,6 +14,8 @@ import {
   BellRing,
   FastForward,
   Radio,
+  Filter,
+  Compass,
 } from 'lucide-react';
 import type { PlayerState, Orb } from '../../shared/game.js';
 import {
@@ -79,6 +81,16 @@ export const RollSection: React.FC<RollSectionProps> = ({
 
   const hasSonarUpgrade = (state.prestigeUpgrades?.sonarPing ?? 0) > 0;
   const hasInstantUpgrade = (state.prestigeUpgrades?.instantReveal ?? 0) > 0;
+  const hasFilterUpgrade = (state.prestigeUpgrades?.autoFilter ?? 0) > 0;
+  const hasResonanceUpgrade = (state.prestigeUpgrades?.resonanceMeter ?? 0) > 0;
+
+  const [filterActive, setFilterActive] = useState(() => {
+    try {
+      return localStorage.getItem('orbs_auto_filter') !== 'false';
+    } catch {
+      return true;
+    }
+  });
 
   const cd = cooldownMs(state, autoRoll);
   const remain = Math.max(0, readyAt - now);
@@ -187,7 +199,7 @@ export const RollSection: React.FC<RollSectionProps> = ({
         <div className="w-full bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border border-amber-500/40 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-amber-300">
           <div className="flex items-center gap-1.5 font-bold">
             <Flame className="w-4 h-4 text-amber-400" />
-            <span>TURBO ROLL ACTIVE (-20% Cooldown)</span>
+            <span>TURBO ACTIVE (-20% Cooldown)</span>
           </div>
           <span className="font-mono font-medium">
             {Math.ceil((state.turboRollUntil - now) / 60000)}m left
@@ -319,6 +331,13 @@ export const RollSection: React.FC<RollSectionProps> = ({
               {orbInfo ? orbInfo.name : 'Tap to Roll'}
             </div>
           </div>
+
+          {/* Critical Roll Badge */}
+          {displayOrb?.isCrit && (
+            <div className="absolute -top-6 bg-gradient-to-r from-rose-500 to-amber-500 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg border border-amber-300">
+              ⚡ 2× CRITICAL ROLL
+            </div>
+          )}
 
           {/* New Discovery Badge */}
           {displayOrb?.isNew && (
@@ -458,7 +477,57 @@ export const RollSection: React.FC<RollSectionProps> = ({
               <span>Chrono-Skip: {instantRevealActive ? 'INSTANT' : 'OFF'}</span>
             </button>
           )}
+
+          {/* Singularity Filter Toggle (Unlocked via Prestige) */}
+          {hasFilterUpgrade && (
+            <button
+              onClick={() => {
+                const next = !filterActive;
+                setFilterActive(next);
+                try {
+                  localStorage.setItem('orbs_auto_filter', String(next));
+                } catch {}
+                sound.playClick();
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer active:scale-95 ${
+                filterActive
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 ring-1 ring-emerald-500/30'
+                  : 'bg-slate-900/90 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Salvages Common & Uncommon rolls directly into +25% bonus gold"
+            >
+              <Filter className={`w-3.5 h-3.5 ${filterActive ? 'text-emerald-400' : ''}`} />
+              <span>Filter: {filterActive ? 'SALVAGE' : 'OFF'}</span>
+            </button>
+          )}
         </div>
+
+        {/* Pity Meter Gauge (Unlocked via Prestige) */}
+        {hasResonanceUpgrade && (
+          <div className="w-full bg-slate-900/80 border border-indigo-900/50 rounded-2xl p-3 shadow-md space-y-1.5 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-indigo-300">
+                <Compass className="w-4 h-4 text-indigo-400" />
+                <span>Pity Luck Meter</span>
+              </div>
+              <span className="font-mono text-cyan-300 font-bold">
+                +{((state.prestigeUpgrades?.resonanceMeter ?? 1) * Math.min(100, Math.floor((state.rollsSinceBest ?? 0) / 20)))}% Pity Luck
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-300"
+                style={{
+                  width: `${Math.min(100, (((state.rollsSinceBest ?? 0) % 20) / 20) * 100)}%`,
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+              <span>{((state.rollsSinceBest ?? 0) % 20)} / 20 rolls to next tier</span>
+              <span>Dry streak: {state.rollsSinceBest ?? 0} rolls</span>
+            </div>
+          </div>
+        )}
 
         {/* Sonar Ping Threshold Config Selector when active */}
         {hasSonarUpgrade && sonarActive && (

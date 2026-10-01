@@ -127,6 +127,23 @@ export function App() {
     return () => clearInterval(interval);
   }, [refreshAll]);
 
+  // Periodic background refresh for social & community event rolling counter
+  useEffect(() => {
+    const pollInterval = tab === 'social' ? 3000 : 8000;
+    const interval = setInterval(() => {
+      void getJson<WorldEvent>('/api/world-event').then(we => {
+        if (we) setWorldEvent(we);
+      }).catch(() => null);
+
+      if (tab === 'social') {
+        void getJson<{ guilds: Guild[]; mine: Guild | null }>('/api/guilds').then(gd => {
+          if (gd) setGuildData(gd);
+        }).catch(() => null);
+      }
+    }, pollInterval);
+    return () => clearInterval(interval);
+  }, [tab]);
+
   // Roll action
   const handleRoll = useCallback(async () => {
     if (isRolling) return;
@@ -144,6 +161,9 @@ export function App() {
         xp: res.xpGained,
       });
       setReadyAt(Date.now() + res.rollsRemainingUntilNext);
+
+      // Immediately bump local rolling counter progress on every roll
+      setWorldEvent(prev => (prev ? { ...prev, currentProgress: prev.currentProgress + (res.batch?.length || 1) } : null));
 
       if (res.orb.rarity >= 100000) {
         showToast(`⭐ MYTHIC DROP! 1 / ${res.orb.rarity.toLocaleString()} Orb!`, 'success');
@@ -303,12 +323,13 @@ export function App() {
   const handlePrestige = async () => {
     setBusy(true);
     try {
-      const res = await getJson<{ state: PlayerState; dustGained: number }>('/api/prestige', {
+      const res = await getJson<{ state: PlayerState; dustGained?: number; cosmicDustEarned?: number }>('/api/prestige', {
         method: 'POST',
       });
       setState(res.state);
       sound.playMythicFanfare();
-      showToast(`Prestige Complete! You harnessed +${res.dustGained} Cosmic Dust!`, 'success');
+      const dust = res.dustGained ?? res.cosmicDustEarned ?? 0;
+      showToast(`Prestige Complete! You earned +${dust} Cosmic Dust.`, 'success');
       void refreshAll();
     } catch (e: any) {
       showToast(e.message || 'Prestige failed', 'warn');
@@ -331,6 +352,43 @@ export function App() {
       showToast('Permanent cosmic upgrade obtained!', 'success');
     } catch (e: any) {
       showToast(e.message || 'Prestige upgrade failed', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Astral Forge Dust Synthesis
+  const handleSynthesizeDust = async () => {
+    setBusy(true);
+    try {
+      const res = await getJson<{ state: PlayerState; dustEarned: number }>('/api/prestige/synthesize', {
+        method: 'POST',
+      });
+      setState(res.state);
+      sound.playChime(1046.5, 'triangle', 0.4);
+      showToast(`+${res.dustEarned} Cosmic Dust forged in the Astral Forge!`, 'success');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Synthesis failed', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Buy Guild Perk
+  const handleBuyGuildPerk = async (perk: 'luckRank' | 'speedRank' | 'vaultRank') => {
+    setBusy(true);
+    try {
+      await getJson('/api/guilds/perk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ perk }),
+      });
+      sound.playChime(784, 'triangle', 0.3);
+      showToast('Guild Perk leveled up for all members!', 'success');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Could not upgrade perk', 'warn');
     } finally {
       setBusy(false);
     }
@@ -398,6 +456,30 @@ export function App() {
       void refreshAll();
     } catch (e: any) {
       showToast(e.message || 'Could not leave guild', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDonateGuild = async (coins: number, shards: number) => {
+    setBusy(true);
+    try {
+      const res = await getJson<{ guild: Guild; tokensEarned: number; xpEarned: number; state: PlayerState }>('/api/guilds/donate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coins, shards }),
+      });
+      setState(res.state);
+      setGuildData(prev => ({
+        ...prev,
+        mine: res.guild,
+        guilds: prev.guilds.map(g => (g.id === res.guild.id ? res.guild : g)),
+      }));
+      sound.playChime(784, 'triangle', 0.25);
+      showToast(`Donated to Guild Treasury! (+${res.tokensEarned} Tokens, +${res.xpEarned} XP)`, 'success');
+      void refreshAll();
+    } catch (e: any) {
+      showToast(e.message || 'Donation failed', 'warn');
     } finally {
       setBusy(false);
     }
@@ -647,6 +729,10 @@ export function App() {
             onJoinGuild={handleJoinGuild}
             onLeaveGuild={handleLeaveGuild}
             onSendMessage={handleSendGuildChat}
+            onBuyGuildPerk={handleBuyGuildPerk}
+            onDonateGuild={handleDonateGuild}
+            playerCoins={state.coins}
+            playerShards={state.shards}
             busy={busy}
           />
         )}
@@ -665,6 +751,7 @@ export function App() {
             state={state}
             onPrestige={handlePrestige}
             onBuyPrestigeUpgrade={handleBuyPrestigeUpgrade}
+            onSynthesizeDust={handleSynthesizeDust}
             onBuyCosmetic={handleBuyCosmetic}
             busy={busy}
           />
