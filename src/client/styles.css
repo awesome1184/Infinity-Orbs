@@ -106,6 +106,7 @@
     linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
   background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 76%);
   mask-image: radial-gradient(ellipse at center, black 0%, transparent 76%);
 }
 
