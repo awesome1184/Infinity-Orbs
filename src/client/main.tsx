@@ -489,14 +489,16 @@ export function App() {
 
   const handleSendGuildChat = async (text: string) => {
     try {
-      await getJson('/api/guilds/chat', {
+      const res = await getJson<{ message: import('../shared/social.js').GuildMessage }>('/api/guilds/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
       void refreshAll();
+      return res.message;
     } catch (e: any) {
       showToast(e.message || 'Could not send message', 'warn');
+      throw e;
     }
   };
 
