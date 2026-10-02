@@ -2,7 +2,7 @@
 
 **Effective date: October 2, 2026**
 
-This Privacy Policy explains how **Infinity Orbs** (the "App"), developed by **u/awesome1184**, handles information when you use the App on Reddit.
+This Privacy Policy explains how **Infinity Orbs** (the "App"), developed by **u/shadow_fen**, handles information when you use the App on Reddit.
 
 The App operates through Reddit's Developer Platform (Devvit). Your use of Reddit and the App is also subject to Reddit's Privacy Policy, User Agreement, Developer Terms, and other applicable Reddit policies.
 
@@ -100,7 +100,7 @@ Reddit may process information about your use of the App under Reddit's own Priv
 
 You can stop using Infinity Orbs at any time.
 
-For questions about or requests concerning Infinity Orbs data, contact **u/awesome1184** through Reddit and describe the account or game information involved. Requests may be subject to verification, Reddit's requirements, and applicable law.
+For questions about or requests concerning Infinity Orbs data, contact **u/shadow_fen** through Reddit and describe the account or game information involved. Requests may be subject to verification, Reddit's requirements, and applicable law.
 
 Some information may need to be retained when required for security, fraud prevention, payment reconciliation, dispute handling, legal obligations, or Reddit platform requirements.
 
@@ -124,7 +124,7 @@ The current version will be posted at this URL and will show its effective date.
 
 For privacy questions or data requests concerning Infinity Orbs:
 
-**Reddit:** u/awesome1184
+**Reddit:** u/shadow_fen
 
 ## 10. Relationship to Reddit's Privacy Policy
 
