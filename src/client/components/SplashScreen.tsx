@@ -73,6 +73,23 @@ export function SplashScreen({ ready, hasProgress, highestRarity = 2, totalRolls
             <span className="splash-mark-core" />
             <span className="splash-ring splash-ring-outer" />
             <span className="splash-ring splash-ring-inner" />
+            <svg className="splash-infinity-svg" viewBox="0 0 200 120" aria-hidden="true">
+              <defs>
+                <linearGradient id="splashInfinityGradient" x1="20" y1="20" x2="180" y2="100" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#ad79ff" />
+                  <stop offset="0.48" stopColor="#f2ecff" />
+                  <stop offset="1" stopColor="#63ddff" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M10 60C30 14 70 14 100 60C130 106 170 106 190 60C170 14 130 14 100 60C70 106 30 106 10 60Z"
+                fill="none"
+                stroke="url(#splashInfinityGradient)"
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </div>
 
           <div className="splash-wordmark">
