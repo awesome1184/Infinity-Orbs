@@ -38,7 +38,7 @@ A purchase is completed only when Reddit's payment system confirms the transacti
 
 Refunds and transaction reversals are governed by Reddit's applicable economic, payments, and refund policies.
 
-For a problem with an Infinity Orbs purchase or delivery, you may contact the developer through the **u/awesome1184** Reddit account so that the issue can be investigated and resolved. Reddit may also reverse transactions or issue refunds under its applicable policies.
+For a problem with an Infinity Orbs purchase or delivery, you may contact the developer through the **u/shadow_fen** Reddit account so that the issue can be investigated and resolved. Reddit may also reverse transactions or issue refunds under its applicable policies.
 
 ## 5. Game Balance and Availability
 
@@ -81,7 +81,7 @@ Your continued use of the App after an update constitutes acceptance of the upda
 
 ## 10. Contact
 
-For questions or disputes concerning Infinity Orbs, contact the developer through Reddit at **u/awesome1184**.
+For questions or disputes concerning Infinity Orbs, contact the developer through Reddit at **u/shadow_fen**.
 
 ## 11. Relationship to Reddit's Terms
 
