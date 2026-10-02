@@ -306,6 +306,26 @@
   animation: splash-ring-spin-reverse 10s linear infinite;
 }
 
+.splash-infinity-svg {
+  position: absolute;
+  left: -17%;
+  top: 21%;
+  width: 134%;
+  height: 58%;
+  z-index: 6;
+  overflow: visible;
+  pointer-events: none;
+  filter:
+    drop-shadow(0 0 4px rgba(255,255,255,.22))
+    drop-shadow(0 0 12px rgba(146,103,255,.32))
+    drop-shadow(0 0 22px rgba(82,202,255,.12));
+  animation: splash-infinity-pulse 4.5s ease-in-out infinite;
+}
+
+.splash-infinity-svg path {
+  opacity: .84;
+}
+
 .splash-wordmark {
   display: flex;
   flex-direction: column;
@@ -706,6 +726,17 @@
 @keyframes splash-orb-right {
   0%, 100% { transform: translateY(-50%) translateX(-9%) rotate(2deg); }
   50% { transform: translateY(calc(-50% + 5px)) translateX(-12%) rotate(-2deg); }
+}
+
+@keyframes splash-infinity-pulse {
+  0%, 100% {
+    transform: scale(.985);
+    opacity: .78;
+  }
+  50% {
+    transform: scale(1.015);
+    opacity: 1;
+  }
 }
 
 @keyframes splash-core-breathe {
