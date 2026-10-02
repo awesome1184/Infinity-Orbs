@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 
 type SplashScreenProps = {
   ready: boolean;
+  hasProgress: boolean;
+  highestRarity?: number;
+  totalRolls?: number;
   onEnter: () => void;
 };
 
@@ -12,7 +15,7 @@ const MESSAGES = [
   'Aligning the orbits',
 ];
 
-export function SplashScreen({ ready, onEnter }: SplashScreenProps) {
+export function SplashScreen({ ready, hasProgress, highestRarity = 2, totalRolls = 0, onEnter }: SplashScreenProps) {
   const [messageIndex, setMessageIndex] = useState(0);
   const [leaving, setLeaving] = useState(false);
 
@@ -109,11 +112,11 @@ export function SplashScreen({ ready, onEnter }: SplashScreenProps) {
             aria-label={ready ? 'Play Infinity Orbs' : 'Loading Infinity Orbs'}
           >
             <span className="splash-cta-sheen" aria-hidden="true" />
-            <span className="splash-cta-label">{ready ? 'PLAY' : 'LOADING'}</span>
+            <span className="splash-cta-label">{ready ? (hasProgress ? 'CONTINUE' : 'PLAY') : 'LOADING'}</span>
             {ready && <span className="splash-cta-arrow" aria-hidden="true">→</span>}
           </button>
           <div className="splash-cta-hint">
-            {ready ? 'PRESS ENTER OR CLICK TO BEGIN' : MESSAGES[messageIndex].toUpperCase()}
+            {ready ? (hasProgress ? 'RESUME YOUR RUN' : 'PRESS ENTER OR CLICK TO BEGIN') : MESSAGES[messageIndex].toUpperCase()}
           </div>
         </div>
 
@@ -126,6 +129,20 @@ export function SplashScreen({ ready, onEnter }: SplashScreenProps) {
             <span style={{ width: `${progress}%` }} />
           </div>
         </div>
+
+        {ready && hasProgress && (
+          <div className="splash-record" aria-label={`Best orb 1 in ${highestRarity.toLocaleString()}, ${totalRolls.toLocaleString()} rolls`}>
+            <div>
+              <span>BEST DROP</span>
+              <strong>1 / {highestRarity.toLocaleString()}</strong>
+            </div>
+            <i aria-hidden="true" />
+            <div>
+              <span>ROLLS</span>
+              <strong>{totalRolls.toLocaleString()}</strong>
+            </div>
+          </div>
+        )}
 
         <div className="splash-footer">
           <span>INFINITE ODDS</span>
