@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 
 type SplashScreenProps = {
   ready: boolean;
@@ -57,7 +57,7 @@ export function SplashScreen({ ready, hasProgress, highestRarity = 2, totalRolls
             '--y': `${(i * 61) % 101}%`,
             '--d': `${2.5 + ((i * 17) % 40) / 10}s`,
             '--s': `${0.8 + ((i * 11) % 13) / 10}`,
-          } as React.CSSProperties} />
+          } as CSSProperties} />
         ))}
       </div>
 
