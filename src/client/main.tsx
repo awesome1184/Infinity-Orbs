@@ -39,6 +39,7 @@ import { ProfileAndPrestige } from './components/ProfileAndPrestige.js';
 import { AchievementsSection } from './components/AchievementsSection.js';
 import { RedditShareModal } from './components/RedditShareModal.js';
 import { RarityTableModal } from './components/RarityTableModal.js';
+import { SplashScreen } from './components/SplashScreen.js';
 import { DevDebugModal } from './components/DevDebugModal.js';
 import './styles.css';
 
@@ -62,6 +63,7 @@ async function getJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 export function App() {
   const [state, setState] = useState<PlayerState | null>(null);
+  const [showSplash, setShowSplash] = useState<boolean>(true);
   const [lastOrb, setLastOrb] = useState<Orb | null>(null);
   const [lastBatch, setLastBatch] = useState<Orb[]>([]);
   const [batchSummary, setBatchSummary] = useState<{
@@ -508,6 +510,15 @@ export function App() {
     void refreshAll();
     return res;
   };
+
+  if (showSplash) {
+    return (
+      <SplashScreen
+        ready={Boolean(state)}
+        onEnter={() => setShowSplash(false)}
+      />
+    );
+  }
 
   if (!state) {
     return (
