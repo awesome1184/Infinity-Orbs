@@ -518,7 +518,10 @@ export function App() {
         hasProgress={Boolean(state && state.totalRolls > 0)}
         highestRarity={state?.highestRarity}
         totalRolls={state?.totalRolls}
-        onEnter={() => setShowSplash(false)}
+        onEnter={() => {
+          sound.playClick();
+          setShowSplash(false);
+        }}
       />
     );
   }
