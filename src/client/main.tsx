@@ -151,7 +151,6 @@ export function App() {
     if (isRolling) return;
     setIsRolling(true);
     try {
-      sound.playRollNormal();
       const res = await getJson<RollResponse>('/api/roll', { method: 'POST' });
       setState(res.state);
       setLastOrb(res.orb);
@@ -547,7 +546,7 @@ export function App() {
   const prestigeReady = calculateCosmicDust(state) > 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
+    <div className="app-shell min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-600 selection:text-white">
       {/* Sticky Top Header */}
       <Header
         state={state}
@@ -560,9 +559,9 @@ export function App() {
 
       {/* Ephemeral Toast Banner */}
       {toast && (
-        <div className="fixed bottom-5 right-5 z-50 animate-in slide-in-from-bottom-5 duration-300">
+          <div className="fixed bottom-5 right-5 z-50 animate-in slide-in-from-bottom-5 duration-300">
           <div
-            className={`px-4 py-3 rounded-2xl text-xs font-bold shadow-2xl border flex items-center gap-2 ${
+            className={`toast-card px-4 py-3 rounded-2xl text-xs font-bold shadow-2xl border flex items-center gap-2 ${
               toast.type === 'success'
                 ? 'bg-slate-900 border-emerald-500/50 text-emerald-300 shadow-emerald-950/50'
                 : toast.type === 'warn'
@@ -577,14 +576,16 @@ export function App() {
       )}
 
       {/* Main Navigation Bar */}
-      <div className="bg-slate-900/40 border-b border-slate-800/80 px-4 py-2 sticky top-[57px] z-20 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+      <div className="app-nav">
+        <div className="nav-shell">
+          <span className="nav-caption">Navigate</span>
+          <div className="nav-list">
           <button
             onClick={() => {
               sound.playClick();
               setTab('roll');
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`nav-tab ${tab === 'roll' ? 'is-active' : ''} ${
               tab === 'roll'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -599,7 +600,7 @@ export function App() {
               sound.playClick();
               setTab('upgrades');
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`nav-tab ${tab === 'upgrades' ? 'is-active' : ''} ${
               tab === 'upgrades'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -614,7 +615,7 @@ export function App() {
               sound.playClick();
               setTab('collection');
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`nav-tab ${tab === 'collection' ? 'is-active' : ''} ${
               tab === 'collection'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -629,7 +630,7 @@ export function App() {
               sound.playClick();
               setTab('quests');
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
+            className={`nav-tab ${tab === 'quests' ? 'is-active' : ''} ${
               tab === 'quests'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -647,7 +648,7 @@ export function App() {
               sound.playClick();
               setTab('social');
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`nav-tab ${tab === 'social' ? 'is-active' : ''} ${
               tab === 'social'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -662,7 +663,7 @@ export function App() {
               sound.playClick();
               setTab('achievements');
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
+            className={`nav-tab ${tab === 'achievements' ? 'is-active' : ''} ${
               tab === 'achievements'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -680,7 +681,7 @@ export function App() {
               sound.playClick();
               setTab('profile');
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
+            className={`nav-tab ${tab === 'profile' ? 'is-active' : ''} ${
               tab === 'profile'
                 ? 'bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -692,11 +693,12 @@ export function App() {
               <span className="w-2 h-2 rounded-full bg-fuchsia-400" />
             )}
           </button>
+          </div>
         </div>
       </div>
 
       {/* Main Container Content */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="app-main flex-1">
         {tab === 'roll' && (
           <RollSection
             state={state}
